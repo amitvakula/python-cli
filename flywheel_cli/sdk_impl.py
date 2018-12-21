@@ -7,6 +7,7 @@ import os
 import requests
 import sys
 
+from . import errors
 from .importers import Uploader, ContainerResolver
 
 CONFIG_PATH = '~/.config/flywheel/user.json'
@@ -40,19 +41,17 @@ def load_config():
             pass
     return config
 
+def get_key(require=True):
+    config = load_config() or {}
+    if config.get('key') is None and require:
+        raise errors.CliError('Not logged in, please login using `fw login` and your API key')
+    return config.get('key')
 
 def create_flywheel_client(require=True):
-    config = load_config()
-    if config is None or config.get('key') is None:
-        if require:
-            print('Not logged in, please login using `fw login` and your API key', file=sys.stderr)
-            sys.exit(1)
-        return None
-    result = flywheel.Flywheel(config['key'])
+    result = flywheel.Flywheel(get_key(require=require))
     log.debug('SDK Version: %s', flywheel.flywheel.SDK_VERSION)
     log.debug('Flywheel Site URL: %s', result.api_client.configuration.host)
     return result
-
 
 def save_api_key(api_key):
     """Save the given api key to the user's config file.
@@ -117,6 +116,34 @@ def get_login_id(fw):
 
     user = fw.get_current_user()
     return '{} {}'.format(user.firstname, user.lastname)
+
+def create_flywheel_session(require=True):
+    baseurl, key = get_key(require=require).rsplit(':', 1)
+    if not baseurl.startswith('http'):
+        baseurl = 'https://' + baseurl + '/api'
+    return ApiSession(baseurl, headers={'Authorization': 'scitran-user ' + key})
+
+
+class ApiSession(requests.Session):
+    def __init__(self, baseurl, headers=None):
+        super().__init__()
+        self.baseurl = baseurl
+        self.headers.update(headers or {})
+
+    def request(self, method, url, *args, **kwargs):
+        try:
+            response = super().request(method, self.baseurl + url, *args, **kwargs)
+        except requests.exceptions.RequestException as exc:
+            raise errors.CliError('Could not make API request: ' + str(exc))
+        try:
+            data = response.json()
+        except ValueError:
+            data = response.content.decode('utf-8')
+        if not response.ok:
+            message = data.get('message') if isinstance(data, dict) else data
+            raise errors.CliError('API request failed: ' + message)
+        return data
+
 
 """
 For now we skip subjects, replacing them (effectively) with the project layer,
@@ -252,4 +279,3 @@ class SdkUploadWrapper(Uploader, ContainerResolver):
         kwargs.setdefault('_preload_content', True)
 
         return self.fw.api_client.call_api(resource_path, method, **kwargs)
-
