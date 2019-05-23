@@ -22,8 +22,8 @@ before_script:
 - python -V # Print out python version for debugging
 # Update VERSION file
 - |
-    if [ "$CIRCLE_TAG" ]; then
-      echo "$CIRCLE_TAG" > flywheel_cli/VERSION
+    if [ "$CI_COMMIT_TAG" ]; then
+      echo "$CI_COMMIT_TAG" > flywheel_cli/VERSION
     fi
 
 - pip install -q -r test-requirements.txt twine
@@ -38,7 +38,7 @@ run:
   - python setup.py bdist_wheel
   - twine check dist/*.whl
   - |
-      if [ "$CIRCLE_TAG" ]; then
+      if [ "$CI_COMMIT_TAG" ]; then
         twine upload -u $PYPI_USER -p $PYPI_PASS dist/*.whl
       fi
 
