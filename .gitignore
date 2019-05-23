@@ -6,5 +6,6 @@ build/
 dist/
 pkgdata/
 .venv/
-
-
+*.swp
+Pipfile
+Pipfile.lock
