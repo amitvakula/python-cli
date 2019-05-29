@@ -51,6 +51,8 @@ def test_audit_log_constructor_with_path_creates_file(audit_path):
 def test_audit_log_get_container_resolver_path():
     audit_log = AuditLog(None)
 
+    assert audit_log.get_container_resolver_path(None) == ''
+
     root = ContainerNode('root')
     assert audit_log.get_container_resolver_path(root) == ''
 

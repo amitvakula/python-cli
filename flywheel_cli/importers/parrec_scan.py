@@ -7,6 +7,7 @@ import sys
 log = logging.getLogger(__name__)
 
 from .abstract_importer import AbstractImporter
+from .abstract_scanner import AbstractScanner
 from .packfile import PackfileDescriptor
 from .. import util
 
@@ -27,24 +28,13 @@ class ParRecAcquisition(object):
         self.par_file = None
 
 
-class ParRecScanner(object):
+class ParRecScanner(AbstractScanner):
     """Class that handles generic PAR/REC import"""
-
     def __init__(self, config):
-        self.config = config
+        super(ParRecScanner, self).__init__(config)
         self.sessions = {}
 
-        self.messages = []
-
-    def discover(self, walker, context, container_factory, path_prefix=None):
-        """Performs discovery of containers to create and files to upload in the given folder.
-
-        Arguments:
-            walker (AbstractWalker): The filesystem to query
-            context (dict): The initial context
-            container_factory (obj): The ContainerFactory instance
-            path_prefix (str): The optional prefix for filenames
-        """
+    def discover(self, walker, context, container_factory, path_prefix=None, audit_log=None):
         # First step is to walk and sort files
         sys.stdout.write('Scanning directories...'.ljust(80) + '\r')
         sys.stdout.flush()
@@ -70,14 +60,14 @@ class ParRecScanner(object):
 
                     acquisition = self.resolve_acquisition(context, par)
                     if acquisition.par_file and not util.files_equal(walker, path, acquisition.par_file):
-                        message = ('File "{}" and "{}" conflict!\n  Both files appear to belong to '
-                            'the same acquisition, but contents differ!').format(path, orig_path)
-                        self.messages.append(('error', message))
+                        message = ('Conflicts with "{}"! Both files appear to belong to '
+                            'the same acquisition, but contents differ!').format(orig_path)
+                        self.report_file_error(audit_log, path, msg=message)
 
                     acquisition.par_file = real_path
 
-                except Exception as e:
-                    log.exception('Unable parse PAR file: %s', real_path)
+                except Exception as exc:
+                    self.report_file_error(audit_log, real_path, exc=exc)
             elif fnmatch.fnmatch(lpath, '*.rec'):
                 rec_files[real_path.lower()] = real_path
             else:
@@ -203,5 +193,5 @@ class ParRecScannerImporter(AbstractImporter):
             walker (AbstractWalker): The filesystem to query
             context (dict): The initial context
         """
-        self.scanner.discover(walker, context, self.container_factory)
+        self.scanner.discover(walker, context, self.container_factory, audit_log=self.audit_log)
         self.messages += self.scanner.messages

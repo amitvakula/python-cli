@@ -5,6 +5,7 @@ import os
 import sys
 
 from .abstract_importer import AbstractImporter
+from .abstract_scanner import AbstractScanner
 from .packfile import PackfileDescriptor
 from .. import util
 
@@ -50,13 +51,13 @@ DICOM_TAGS = [
 def _at_stack_id(tag, VR, length):
     return tag == (0x0020, 0x9056)
 
-class DicomScanner(object):
+class DicomScanner(AbstractScanner):
     # The session label dicom header key
     session_label_key = 'StudyDescription'
 
     def __init__(self, config):
         """Class that handles generic dicom import"""
-        self.config = config
+        super(DicomScanner, self).__init__(config)
 
         if config:
             self.deid_profile = config.deid_profile
@@ -70,19 +71,12 @@ class DicomScanner(object):
             self.profile = self.deid_profile.get_file_profile('dicom')
 
         self.sessions = {}
-        self.messages = []
 
     def save_subject_map(self):
         if self.subject_map:
             self.subject_map.save()
 
-    def discover(self, walker, context, container_factory, path_prefix=None):
-        """Performs discovery of containers to create and files to upload in the given folder.
-
-        Arguments:
-            walker (AbstractWalker): The filesystem to query
-            context (dict): The initial context
-        """
+    def discover(self, walker, context, container_factory, path_prefix=None, audit_log=None):
         tags = [ Tag(tag_for_keyword(keyword)) for keyword in DICOM_TAGS ]
 
         # If we're mapping subject fields to id, then include those fields in the scan
@@ -105,6 +99,7 @@ class DicomScanner(object):
             files_scanned = files_scanned+1
 
             try:
+                full_path = path_prefix + path if path_prefix else path
                 with walker.open(path, 'rb', buffering=self.config.buffer_size) as f:
                     # Unzip gzipped files
                     _, ext = os.path.splitext(path)
@@ -117,20 +112,21 @@ class DicomScanner(object):
                         decode=False, stop_when=_at_stack_id, update_in_place=False, specific_tags=tags)
                     acquisition = self.resolve_acquisition(context, dcm)
 
-                    sop_uid = self.get_value(dcm, 'SOPInstanceUID')
+                    sop_uid = self.get_value(dcm, 'SOPInstanceUID', required=True)
                     if sop_uid in acquisition.files:
-                        full_path = path_prefix + path if path_prefix else path
                         orig_path = acquisition.files[sop_uid]
 
                         if not util.files_equal(walker, full_path, orig_path):
-                            message = ('File "{}" and "{}" conflict!\n  Both files have the '
-                                'same IDs, but contents differ!').format(path, orig_path)
-                            self.messages.append(('error', message))
+                            message = ('DICOM conflicts with {}! Both files have the '
+                                'same IDs, but contents differ!').format(orig_path)
+                            self.report_file_error(audit_log, full_path, msg=message)
                     else:
                         acquisition.files[sop_uid] = path
 
-            except DicomFileError as e:
-                log.debug('File {} is not a dicom: {}'.format(path, e))
+            except DicomFileError as exc:
+                self.report_file_error(audit_log, full_path, exc=exc, msg='Not a DICOM - {}'.format(exc))
+            except Exception as exc:
+                self.report_file_error(audit_log, full_path, exc=exc)
 
         sys.stdout.write(''.ljust(80) + '\n')
         sys.stdout.flush()
@@ -150,7 +146,7 @@ class DicomScanner(object):
 
     def resolve_session(self, context, dcm):
         """Find or create a sesson from a dcm file. """
-        session_uid = self.get_value(dcm, 'StudyInstanceUID')
+        session_uid = self.get_value(dcm, 'StudyInstanceUID', required=True)
         if session_uid not in self.sessions:
             subject_label = context.get('subject', {}).get('label')
             # Map subject
@@ -181,7 +177,7 @@ class DicomScanner(object):
     def resolve_acquisition(self, context, dcm):
         """Find or create an acquisition from a dcm file. """
         session = self.resolve_session(context, dcm)
-        series_uid = self.get_value(dcm, 'SeriesInstanceUID')
+        series_uid = self.get_value(dcm, 'SeriesInstanceUID', required=True)
         if series_uid not in session.acquisitions:
             # Get acquisition timestamp (based on manufacturer)
             if dcm.get_manufacturer() == 'SIEMENS':
@@ -227,7 +223,7 @@ class DicomScanner(object):
 
         return DicomFile.timestamp(date_value, time_value, util.DEFAULT_TZ)
 
-    def get_value(self, dcm, key, default=None):
+    def get_value(self, dcm, key, default=None, required=False):
         """Get a transformed value"""
         if self.profile:
             result = self.profile.get_value(None, dcm.raw, key)
@@ -235,6 +231,10 @@ class DicomScanner(object):
                 result = default
         else:
             result = dcm.get(key, default)
+
+        if result is None and required:
+            raise ValueError('DICOM is missing {}'.format(key))
+
         return result
 
 
@@ -288,5 +288,5 @@ class DicomScannerImporter(AbstractImporter):
             walker (AbstractWalker): The filesystem to query
             context (dict): The initial context
         """
-        self.scanner.discover(walker, context, self.container_factory)
+        self.scanner.discover(walker, context, self.container_factory, audit_log=self.audit_log)
         self.messages += self.scanner.messages

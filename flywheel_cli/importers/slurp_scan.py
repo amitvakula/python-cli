@@ -1,7 +1,10 @@
 """Provides a scanner that will group files together under a common prefix"""
 import copy
 
-class SlurpScanner(object):
+from .abstract_scanner import AbstractScanner
+
+
+class SlurpScanner(AbstractScanner):
     """SlurpScanner groups files together by a common prefix.
 
     This works by looking at the first slash (or if there is no slash, the first dot) in
@@ -9,16 +12,9 @@ class SlurpScanner(object):
     """
     def __init__(self, config):
         """Class that handles generic acquisition slurping"""
-        self.config = config
-        self.messages = []
+        super(SlurpScanner, self).__init__(config)
 
-    def discover(self, walker, context, container_factory, path_prefix=None):
-        """Performs discovery of containers to create and files to upload in the given folder.
-
-        Arguments:
-            walker (AbstractWalker): The filesystem to query
-            context (dict): The initial context
-        """
+    def discover(self, walker, context, container_factory, path_prefix=None, audit_log=None):
         # Discover files first
         files = list(sorted(walker.files(subdir=path_prefix)))
 
