@@ -170,7 +170,7 @@ class ScannerNode(ImportTemplateNode):
         """Set the next node"""
         raise ValueError('Cannot declare nodes after dicom scanner!')
 
-    def scan(self, src_fs, path_prefix, context, container_factory):
+    def scan(self, src_fs, path_prefix, context, container_factory, audit_log):
         """Scan directory contents, rather than walking.
 
         Called if this is a scanner node.
@@ -180,12 +180,14 @@ class ScannerNode(ImportTemplateNode):
             path_prefix (str): The path prefix
             context (dict): The current context object
             container_factory: The container factory where nodes should be added
+            audit_log: The audit log instance
 
         Returns:
             list: The list of warning/error messages
         """
         scanner = self.scanner_cls(self.config)
-        scanner.discover(src_fs, context, container_factory, path_prefix=path_prefix)
+        scanner.discover(src_fs, context, container_factory,
+                path_prefix=path_prefix, audit_log=audit_log)
         return scanner.messages
 
     def __repr__(self):

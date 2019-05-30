@@ -29,6 +29,8 @@ class AuditLog(object):
 
     def get_container_resolver_path(self, container, file_name=None):
         path = []
+        if container is None:
+            return ''
         while container.container_type != 'root':
             if container.container_type == 'group':
                 path = [container.id] + path
