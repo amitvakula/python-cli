@@ -27,6 +27,7 @@ INSTALL_REQUIRES = [
     'flywheel-sdk>=8.0.0',
     'pyinstaller~=3.3.1',
     'tzlocal~=1.5.1',
+    'urllib3>=1.25.2',
 ]
 
 DEV_REQUIRES = [
