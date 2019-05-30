@@ -18,6 +18,10 @@ class MockContainerResolver(ContainerResolver):
         self.created_nodes.append((parent, container))
         return 'created_' + container.label.lower()
 
+    def check_unique_uids(self, request):
+        raise NotImplementedError('No check unique-uids in MockContainerResolver')
+
+
 def test_resolve_group_not_exist():
     resolver = MockContainerResolver()
     factory = ContainerFactory(resolver)

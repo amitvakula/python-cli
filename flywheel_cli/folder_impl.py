@@ -48,3 +48,6 @@ class FSWrapper(Uploader, ContainerResolver):
             self.dst_fs.makedir(path)
 
         return path
+
+    def check_unique_uids(self, request):
+        raise NotImplementedError('Unique UID check is not supported for output-folder')

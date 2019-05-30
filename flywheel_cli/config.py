@@ -67,6 +67,9 @@ class Config(object):
         # Set use_uids property (default is use uids)
         self.use_uids = not getattr(args, 'no_uids', False)
 
+        # Set check_unique_uids property (default is False)
+        self.check_unique_uids = getattr(args, 'unique_uids', False)
+
         # Get de-identification profile
         if getattr(args, 'de_identify', False):
             profile_name = 'minimal'
@@ -211,6 +214,7 @@ class Config(object):
         parser.add_argument('--exclude', action='append', dest='exclude', help='Patterns of filenames to exclude')
         parser.add_argument('--output-folder', help='Output to the given folder instead of uploading to flywheel')
         parser.add_argument('--no-uids', action='store_true', help='Ignore UIDs when grouping sessions and acquisitions')
+        parser.add_argument('--unique-uids', action='store_true', help='Warn before creating any containers with duplicate UIDs')
         parser.add_argument('--max-tempfile', default=50, type=int, help='The max in-memory tempfile size, in MB, or 0 to always use disk')
         parser.add_argument('--skip-existing', action='store_true', help='Skip import of existing files')
         parser.add_argument('--no-audit-log', action='store_true', help='Don\'t generate an audit log.')

@@ -160,6 +160,14 @@ class SdkUploadWrapper(Uploader, ContainerResolver):
         log.debug('Created container: %s as %s', create_doc, new_id)
         return new_id
 
+    def check_unique_uids(self, request):
+        try:
+            return self.fw.check_uids_exist(request)
+        except flywheel.ApiException as e:
+            if e.status == 404:
+                raise NotImplementedError('Unique UID check is not supported by the server')
+            raise
+
     def upload(self, container, name, fileobj, metadata=None):
         upload_fn = getattr(self.fw, 'upload_file_to_{}'.format(container.container_type), None)
 

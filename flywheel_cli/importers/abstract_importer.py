@@ -158,6 +158,7 @@ class AbstractImporter(ABC):
         """
         results = copy.copy(self.messages)
 
+
         for _, container in self.container_factory.walk_containers():
             if container.container_type in util.NO_FILE_CONTAINERS:
                 cname = container.label or container.id
@@ -169,6 +170,18 @@ class AbstractImporter(ABC):
                 for desc in container.packfiles:
                     msg = 'pack-file cannot be uploaded to {} {} - files are not supported at this level'.format(container.container_type, cname)
                     results.append(('warn', msg))
+
+        # Unique UID Check
+        if self.config.check_unique_uids:
+            uid_count, conflict_containers = self.container_factory.check_container_unique_uids()
+
+            if not uid_count:
+                results.append(('warn', 'No UIDs found, even though check-unique-ids was requested!'))
+
+            for container in conflict_containers:
+                msg = '{} {} has duplicates the UID of an existing container (uid={})'.format(
+                    container.container_type, getattr(container, 'label', 'UNKNOWN'), container.uid)
+                results.append(('warn', msg))
 
         return results
 
@@ -182,14 +195,13 @@ class AbstractImporter(ABC):
         self.perform_discover(walker, context)
 
     @abstractmethod
-    def perform_discover(walker, context):
+    def perform_discover(self, walker, context):
         """Performs discovery of containers to create and files to upload in the given folder.
 
         Arguments:
             walker (AbstractWalker): The filesystem to query
             context (dict): The initial context for discovery
         """
-        pass
 
     def interactive_import(self, folder):
         """Performs interactive import of the discovered hierarchy"""
@@ -218,6 +230,7 @@ class AbstractImporter(ABC):
         if self.container_factory.is_empty():
             log.error('Nothing found to import!')
             sys.exit(1)
+
 
         # Print summary
         print('The following data hierarchy was found:\n')

@@ -1,9 +1,16 @@
 import collections
 import copy
+import logging
 
 from abc import ABC, abstractmethod
 
 CONTAINERS = ['group', 'project', 'subject', 'session', 'acquisition']
+UID_CONTAINERS = {
+    'acquisition': 'acquisitions',
+    'session': 'sessions'
+}
+
+log = logging.getLogger(__name__)
 
 def combine_path(path, child):
     if path:
@@ -47,7 +54,6 @@ class ContainerResolver(ABC):
         Returns:
             str, str: The id and uid if the container exists, otherwise None
         """
-        return None, None
 
     @abstractmethod
     def create_container(self, parent, container):
@@ -60,7 +66,17 @@ class ContainerResolver(ABC):
         Returns:
             str: The id of the newly created container
         """
-        return None
+
+    @abstractmethod
+    def check_unique_uids(self, request):
+        """Given a dictionary of uids by container type, check which are unique
+
+        Arguments:
+            request (dict): The dictionary of UIDs to check
+
+        Returns:
+            dict: The subset of UIDs that are not unique
+        """
 
 
 class ContainerFactory(object):
@@ -158,6 +174,53 @@ class ContainerFactory(object):
         if not projects:
             return None
         return projects[0]
+
+    def check_container_unique_uids(self):
+        """Check for unique uids in sessions and acquisitions.
+
+        Returns:
+            tuple(int, list): The number of containers with UIDs, and a list
+                              of containers with non-unique UIDs.
+        """
+        uid_count = 0
+        uid_check_containers = {}
+        conflict_containers = []
+
+        for _, container in self.walk_containers():
+            uid = getattr(container, 'uid', None)
+            if not uid:
+                continue
+
+            collection_name = UID_CONTAINERS.get(container.container_type)
+            if collection_name is None:
+                continue
+
+            uid_count += 1
+            uid_map = uid_check_containers.setdefault(collection_name, {})
+            if uid in uid_map:
+                conflict_containers.append(container)
+                continue
+
+            uid_map[uid] = container
+
+        # Invoke the UID check API
+        log.debug('Checking %d UIDs', uid_count)
+        if uid_count:
+            # Convert into a check UIDs request
+            uid_request = {}
+            for key, uid_map in uid_check_containers.items():
+                uid_request[key] = list(uid_map.keys())
+
+            log.debug('check_unique_uids, request=%s', uid_request)
+            result = self.resolver.check_unique_uids(uid_request)
+            log.debug('check_unique_uids, result=%s', result)
+
+            for key, uid_list in result.items():
+                uid_map = uid_check_containers.get(key, {})
+                for uid in uid_list:
+                    conflict_containers.append(uid_map[uid])
+
+        return uid_count, conflict_containers
 
     def _resolve_child(self, parent, container_type, context, path):
         """Resolve a child by searching the parent, or creating a new node
