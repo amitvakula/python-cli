@@ -124,7 +124,10 @@ class DicomScanner(AbstractScanner):
                         acquisition.files[sop_uid] = path
 
             except DicomFileError as exc:
-                self.report_file_error(audit_log, full_path, exc=exc, msg='Not a DICOM - {}'.format(exc))
+                if util.is_dicom_file(path):
+                    self.report_file_error(audit_log, full_path, exc=exc, msg='Not a DICOM - {}'.format(exc))
+                else:
+                    log.debug('Ignoring non-DICOM file: %s', full_path)
             except Exception as exc:
                 self.report_file_error(audit_log, full_path, exc=exc)
 

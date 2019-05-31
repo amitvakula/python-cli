@@ -148,9 +148,31 @@ def contains_dicoms(walker):
     # If we encounter a single dicom, assume true
     for root, _, files in walker.walk():
         for file_info in files:
-            if file_info.name.endswith('.dcm') or file_info.name.endswith('.dcm.gz'):
+            if is_dicom_file(file_info.name):
                 return True
     return False
+
+
+DICOM_EXTENSIONS = ('.dcm', '.dcm.gz', '.dicom', '.dicom.gz')
+
+
+def is_dicom_file(path):
+    """Check if the given path appears to be a dicom file.
+
+    Only looks at the extension, not the contents.
+
+    Args:
+        path (str): The path to the dicom file
+
+    Returns:
+        bool: True if the file appears to be a dicom file
+    """
+    path = path.lower()
+    for ext in DICOM_EXTENSIONS:
+        if path.endswith(ext):
+            return True
+    return False
+
 
 def localize_timestamp(timestamp, timezone=None):
     # pylint: disable=missing-docstring
