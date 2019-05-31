@@ -15,17 +15,25 @@ class AuditLog(object):
                 csv_writer = csv.DictWriter(log_file, fieldnames=self.headers)
                 csv_writer.writeheader()
 
+    def log_root_dir(self, rootdir):
+        if self.path:
+            self._write_entry(src_path=rootdir, message='Begin import scan')
+
     def add_log(self, src_path, container, file_name, failed=False, message=None):
         if self.path:
             resolver_path = self.get_container_resolver_path(container, file_name)
-            with open(self.path, 'a') as log_file:
-                csv_writer = csv.DictWriter(log_file, fieldnames=self.headers)
-                csv_writer.writerow({
-                    'Source Path': src_path,
-                    'Flywheel Path': resolver_path,
-                    'Failed': 'true' if failed else 'false',
-                    'Message': message if message else '',
-                })
+            self._write_entry(src_path=src_path, flywheel_path=resolver_path,
+                failed='true' if failed else 'false', message=message or '')
+
+    def _write_entry(self, src_path='', flywheel_path='', failed='', message=''):
+        with open(self.path, 'a') as log_file:
+            csv_writer = csv.DictWriter(log_file, fieldnames=self.headers)
+            csv_writer.writerow({
+                'Source Path': src_path,
+                'Flywheel Path': flywheel_path,
+                'Failed': failed,
+                'Message': message
+            })
 
     def get_container_resolver_path(self, container, file_name=None):
         path = []

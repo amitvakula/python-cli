@@ -205,7 +205,6 @@ class AbstractImporter(ABC):
 
     def interactive_import(self, folder):
         """Performs interactive import of the discovered hierarchy"""
-
         # Sanity check
         if not self.support_subject_mapping and self.deid_profile and self.deid_profile.map_subjects:
             log.error('Subject mapping not supported with this import type!')
@@ -216,6 +215,9 @@ class AbstractImporter(ABC):
         except util.UnsupportedFilesystemError as e:
             log.exception('Unsupported filesystem')
             sys.exit(1)
+
+        # Log the root directory of the scan
+        self.audit_log.log_root_dir(folder)
 
         try:
             log.debug('Using source filesystem: %s', fs_url)
