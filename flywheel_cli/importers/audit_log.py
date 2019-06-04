@@ -70,6 +70,5 @@ class AuditLog(object):
         except:
             log.error('Error uploading audit-log', exc_info=True)
         else:
-            print('%s uploaded to the "%s" project. Removing local file.' % (
+            print('%s uploaded to the "%s" project.' % (
                 log_name, project.label))
-            os.remove(self.path)

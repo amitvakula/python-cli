@@ -92,6 +92,8 @@ class Config(object):
 
         # An audit file to track which files are being uploaded to where
         self.audit_log = not getattr(args, 'no_audit_log', False)
+        if self.audit_log:
+            self.audit_log = getattr(args, 'audit_log_path', True)
 
         self.walk_filters = {
             'filter': getattr(args, 'filter', []),
@@ -218,6 +220,7 @@ class Config(object):
         parser.add_argument('--max-tempfile', default=50, type=int, help='The max in-memory tempfile size, in MB, or 0 to always use disk')
         parser.add_argument('--skip-existing', action='store_true', help='Skip import of existing files')
         parser.add_argument('--no-audit-log', action='store_true', help='Don\'t generate an audit log.')
+        parser.add_argument('--audit-log-path', help='Location to save audit log')
         parser.add_argument('--private-dicom-tags', help='Path to a private dicoms csv file')
         parser.add_argument('--ignore-unknown-tags', action='store_true', help='Ignore unknown dicom tags')
         return parser

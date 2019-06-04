@@ -342,9 +342,10 @@ class AbstractImporter(ABC):
         """Called before actual upload begins"""
         pass
 
-    def _init_audit_log(self, audit_log_enabled):
-        if audit_log_enabled:
-            audit_log_path = 'audit_log-{}.csv'.format(datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
+    def _init_audit_log(self, audit_log_path):
+        if audit_log_path:
+            if audit_log_path is True:
+                audit_log_path = 'audit_log-{}.csv'.format(datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
         else:
             audit_log_path = None
         return AuditLog(audit_log_path)

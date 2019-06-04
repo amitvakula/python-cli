@@ -140,6 +140,6 @@ def test_audit_log_finalize_success(audit_path):
         container_factory.resolver.upload.assert_called()
         container_factory.get_first_project.assert_called()
 
-        # File got deleted
-        assert not os.path.isfile(audit_path)
+        # File did not get deleted
+        assert os.path.isfile(audit_path)
 
