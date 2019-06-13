@@ -7,7 +7,7 @@
 It's recommended that you use [pipenv](https://docs.pipenv.org/en/latest/) to manage dependencies. For example:
 ```
 > python3 -m pip install pipenv
-> pipenv install -e .[dev]
+> pipenv --three install -e .[dev]
 ```
 
 ## Testing
