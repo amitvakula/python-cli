@@ -93,7 +93,7 @@ class Config(object):
         # An audit file to track which files are being uploaded to where
         self.audit_log = not getattr(args, 'no_audit_log', False)
         if self.audit_log:
-            self.audit_log = getattr(args, 'audit_log_path', True)
+            self.audit_log = getattr(args, 'audit_log_path', None) or True
 
         self.walk_filters = {
             'filter': getattr(args, 'filter', []),
