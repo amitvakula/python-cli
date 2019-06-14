@@ -90,6 +90,11 @@ class Config(object):
         if getattr(args, 'ignore_unknown_tags', False):
             dcm.global_ignore_unknown_tags()
 
+        # Register encoding aliases
+        encoding_aliases = getattr(args, 'encodings', None)
+        if encoding_aliases is not None:
+            Config.register_encoding_aliases(encoding_aliases)
+
         # An audit file to track which files are being uploaded to where
         self.audit_log = not getattr(args, 'no_audit_log', False)
         if self.audit_log:
@@ -223,6 +228,7 @@ class Config(object):
         parser.add_argument('--audit-log-path', help='Location to save audit log')
         parser.add_argument('--private-dicom-tags', help='Path to a private dicoms csv file')
         parser.add_argument('--ignore-unknown-tags', action='store_true', help='Ignore unknown dicom tags')
+        parser.add_argument('--encodings', help='Set character encoding aliases. E.g. win_1251=cp1251')
         return parser
 
     @staticmethod
@@ -279,6 +285,16 @@ class Config(object):
                     if value is None:
                         value = 'true'
                     dest[key] = value
+
+    @staticmethod
+    def register_encoding_aliases(encoding_aliases):
+        """Register common encoding aliases"""
+        import encodings
+        for encoding_spec in re.split(r'[,\s]+', encoding_aliases):
+            if not encoding_spec:
+                continue
+            key, _, value = encoding_spec.partition('=')
+            encodings.aliases.aliases[key.strip().lower()] = value.strip().lower()
 
 
 def merge_lists(a, b):
