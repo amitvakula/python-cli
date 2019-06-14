@@ -61,12 +61,12 @@ def login(args):
 
     try:
         # Get current user
-        user = fw.get_current_user()
+        login_id = sdk_impl.get_login_id(fw)
 
         # Save credentials
         sdk_impl.save_api_key(args.api_key)
 
-        print('You are now logged in as {} {}!'.format(user.firstname, user.lastname))
+        print('You are now logged in as: {}!'.format(login_id))
     except Exception as e:
         log.debug('Login error', exc_info=True)
         perror('Error logging in: {}'.format(str(e)))
@@ -86,14 +86,13 @@ def status(args):
         sys.exit(1)
 
     try:
-        user = fw.get_current_user()
+        login_id = sdk_impl.get_login_id(fw)
 
         # Print out status and site
         host_url = fw.api_client.configuration.host
         hostname = urlparse(host_url).hostname
 
-        print('You are currently logged in as {} {} to {}'.format(
-            user.firstname, user.lastname, hostname))
+        print('You are currently logged in as {} to {}'.format(login_id, hostname))
     except Exception as e:
         perror('{}\n'.format(e))
         perror('Could not authenticate - are you sure your API key is up to date?')
@@ -195,7 +194,10 @@ TIME_FORMAT = '%b %d %H:%M'
 def ls(args):
     fw = sdk_impl.create_flywheel_client()
 
-    user = fw.get_current_user()
+    try:
+        user = fw.get_current_user()
+    except:
+        user = None
 
     path = sdk_impl.parse_resolver_path(args.path)
     result = fw.resolve(path)
@@ -216,7 +218,9 @@ def ls(args):
 
 
 def _get_row_for_container(cont, parent, user, show_ids):
-    if 'permissions' in cont:
+    if user is None:
+        level = 'admin'
+    elif 'permissions' in cont:
         level = _get_level(cont, user.id)
     else:
         level = _get_level(parent, user.id)

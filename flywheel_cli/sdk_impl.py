@@ -101,6 +101,16 @@ def parse_resolver_path(path):
 
     return [path_el for path_el in path if path_el]
 
+def get_login_id(fw):
+    """Get a readable login id for the current api key"""
+    status = fw.get_auth_status()
+
+    if status.is_device:
+        device = fw.get_device(status.origin.id)
+        return '{} - {}'.format(device.get('type', 'device'), device.get('name', status.origin.id))
+
+    user = fw.get_current_user()
+    return '{} {}'.format(user.firstname, user.lastname)
 
 """
 For now we skip subjects, replacing them (effectively) with the project layer,
