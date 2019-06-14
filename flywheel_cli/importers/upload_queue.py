@@ -164,19 +164,13 @@ class PackfileTask(Task):
         self.max_spool = max_spool
 
         self._bytes_processed = None
+        self._logged_error = False
 
     def execute(self):
         if self.max_spool:
             tmpfile = tempfile.SpooledTemporaryFile(max_size=self.max_spool)
         else:
             tmpfile = tempfile.TemporaryFile()
-
-        zip_member_count = create_zip_packfile(tmpfile, self.walker, packfile_type=self.packfile_type,
-            subdir=self.subdir, paths=self.paths, compression=self.compression,
-            progress_callback=self.update_bytes_processed, deid_profile=self.deid_profile)
-
-        #Rewind
-        tmpfile.seek(0)
 
         # store the packfile path
         audit_path = None
@@ -186,6 +180,22 @@ class PackfileTask(Task):
             audit_path = os.path.dirname(self.paths[0])
         else:
             audit_path = self.walker.get_fs_url()
+
+        try:
+            zip_member_count = create_zip_packfile(tmpfile, self.walker, packfile_type=self.packfile_type,
+                subdir=self.subdir, paths=self.paths, compression=self.compression,
+                progress_callback=self.update_bytes_processed, deid_profile=self.deid_profile)
+        except Exception as ex:
+            log.debug('Error processing packfile at %s', audit_path, exc_info=True)
+            if not self._logged_error:
+                message = 'Error creating packfile: {}'.format(ex)
+                self.audit_log.add_log(audit_path, self.container, self.filename,
+                        failed=True, message=message)
+                self._logged_error = True
+            raise
+
+        #Rewind
+        tmpfile.seek(0)
 
         # Remove walker reference
         self.walker = None
@@ -279,10 +289,10 @@ class UploadQueue(WorkQueue):
         self.add_audit_log(task, failed=True, message='Upload error')
         super(UploadQueue, self).error(task)
 
-    def log_exception(self, job):
+    def log_exception(self, job, exc_info):
         self.suspend_reporting()
 
-        super(UploadQueue, self).log_exception(job)
+        super(UploadQueue, self).log_exception(job, exc_info)
 
         self.resume_reporting()
 

@@ -122,9 +122,10 @@ class WorkQueue(object):
             with self._complete_cond:
                 self._complete_cond.notify_all()
 
-    def log_exception(self, job):
+    def log_exception(self, job, exc_info):
         with self._lock:
-            log.exception('Error {}'.format(job.get_desc()))
+            log.error('%s Error: %s', job.get_desc(), str(exc_info))
+            log.debug('Details:', exc_info=exc_info)
 
     def has_errors(self):
         with self._lock:
@@ -220,9 +221,9 @@ class WorkQueue(object):
 
             try:
                 next_job, priority = job.execute()
-            except Exception:
+            except Exception as ex:
                 # Add to errors list
-                self.log_exception(job)
+                self.log_exception(job, ex)
                 self.error(job)
                 continue
 
