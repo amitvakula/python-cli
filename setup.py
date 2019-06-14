@@ -23,7 +23,7 @@ INSTALL_REQUIRES = [
     'crayons>=0.2.0',
     'fs>=2.4.4',
     'flywheel-bids~=0.8.0',
-    'flywheel_migration>=0.10.0',
+    'flywheel_migration>=0.11.0',
     'flywheel-sdk==8.2.0',
     'pyinstaller~=3.3.1',
     'tzlocal~=1.5.1',
