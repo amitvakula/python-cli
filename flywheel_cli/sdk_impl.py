@@ -69,6 +69,12 @@ def save_api_key(api_key):
         config['key'] = api_key
 
     path = os.path.expanduser(CONFIG_PATH)
+
+    # Ensure directory exists
+    config_dir = os.path.dirname(path)
+    if not os.path.isdir(config_dir):
+        os.makedirs(config_dir)
+
     with open(path, 'w') as f:
         json.dump(config, f)
 
