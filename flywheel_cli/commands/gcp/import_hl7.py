@@ -41,7 +41,7 @@ def add_command(subparsers):
                         help='HL7 store (default: {})'.format(hl7store))
     parser.add_argument('--ref', metavar='REF', action='append', dest='refs', default=[],
                         help='<id> to import')
-    parser.add_argument('--async', action='store_true',
+    parser.add_argument('--job-async', action='store_true',
                         help='Do not wait for import job to finish')
     parser.add_argument('--debug', action='store_true',
                         help='Run import gear in debug mode')
@@ -89,7 +89,7 @@ def import_hl7(args):
     job_id = job['_id']
     print('Started ghc-import job ' + job_id)
 
-    if not args.async:
+    if not args.job_async:
         jobs_api = client.jobs_api
         last_log_entry = 0
         print('Waiting for import job to finish...')
