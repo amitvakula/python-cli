@@ -25,23 +25,23 @@ def add_command(subparsers):
                                    description=IMPORT_HL7_DESC,
                                    formatter_class=argparse.RawTextHelpFormatter)
 
-    profile = get_profile()
-    project = profile.get('project')
-    location = profile.get('location')
-    dataset = profile.get('hc_dataset')
-    hl7store = profile.get('hc_hl7store')
+    # profile = get_profile()
+    # project = profile.get('project')
+    # location = profile.get('location')
+    # dataset = profile.get('hc_dataset')
+    # hl7store = profile.get('hc_hl7store')
 
-    parser.add_argument('--project', metavar='NAME', default=project,
-                        help='GCP project (default: {})'.format(project))
-    parser.add_argument('--location', metavar='NAME', default=location,
-                        help='Location (default: {})'.format(location))
-    parser.add_argument('--dataset', metavar='NAME', default=dataset,
-                        help='Dataset (default: {})'.format(dataset))
-    parser.add_argument('--hl7store', metavar='NAME', default=hl7store,
-                        help='HL7 store (default: {})'.format(hl7store))
+    parser.add_argument('--project', metavar='NAME',
+                        help='GCP project (default: {})'.format('project'))
+    parser.add_argument('--location', metavar='NAME',
+                        help='Location (default: {})'.format('location'))
+    parser.add_argument('--dataset', metavar='NAME',
+                        help='Dataset (default: {})'.format('dataset'))
+    parser.add_argument('--hl7store', metavar='NAME',
+                        help='HL7 store (default: {})'.format('hl7store'))
     parser.add_argument('--ref', metavar='REF', action='append', dest='refs', default=[],
                         help='<id> to import')
-    parser.add_argument('--job-async', action='store_true',
+    parser.add_argument('--job_async', action='store_true',
                         help='Do not wait for import job to finish')
     parser.add_argument('--debug', action='store_true',
                         help='Run import gear in debug mode')

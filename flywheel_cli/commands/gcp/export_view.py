@@ -36,14 +36,14 @@ def add_command(subparsers):
     parser.add_argument('container', metavar='CONTAINER',
         help='Container path to run data-view on (group/proj/subj/sess/acq)')
 
-    profile = get_profile()
-    project = profile.get('project')
+    # profile = get_profile()
+    # project = profile.get('project')
     dataset = 'flywheel_views'
 
-    parser.add_argument('--project', metavar='NAME', default=project,
-        help='GCP project (default: {})'.format(project))
-    parser.add_argument('--dataset', metavar='NAME', default=dataset,
-        help='Dataset (default: {})'.format(dataset))
+    parser.add_argument('--project', metavar='NAME',
+        help='GCP project (default: {})'.format('project'))
+    parser.add_argument('--dataset', metavar='NAME',
+        help='Dataset (default: {})'.format('dataset'))
     parser.add_argument('--table', metavar='NAME', default=None,
         help='Table (default: username_YYYYMMDD_HHMMSS)')
 

@@ -26,25 +26,25 @@ def add_command(subparsers):
         description=IMPORT_DICOM_DESC,
         formatter_class=argparse.RawTextHelpFormatter)
 
-    profile = get_profile()
-    project = profile.get('project')
-    location = profile.get('location')
-    dataset = profile.get('hc_dataset')
-    dicomstore = profile.get('hc_dicomstore')
+    # profile = get_profile()
+    # project = profile.get('project')
+    # location = profile.get('location')
+    # dataset = profile.get('hc_dataset')
+    # dicomstore = profile.get('hc_dicomstore')
 
-    parser.add_argument('--project', metavar='NAME', default=project,
-        help='GCP project (default: {})'.format(project))
-    parser.add_argument('--location', metavar='NAME', default=location,
-        help='Location (default: {})'.format(location))
-    parser.add_argument('--dataset', metavar='NAME', default=dataset,
-        help='Dataset (default: {})'.format(dataset))
-    parser.add_argument('--dicomstore', metavar='NAME', default=dicomstore,
-        help='Dicomstore (default: {})'.format(dicomstore))
+    parser.add_argument('--project', metavar='NAME',
+        help='GCP project (default: {})'.format('project'))
+    parser.add_argument('--location', metavar='NAME',
+        help='Location (default: {})'.format('location'))
+    parser.add_argument('--dataset', metavar='NAME',
+        help='Dataset (default: {})'.format('dataset'))
+    parser.add_argument('--dicomstore', metavar='NAME',
+        help='Dicomstore (default: {})'.format('dicomstore'))
     parser.add_argument('--uid', metavar='UID', action='append', dest='uids', default=[],
         help='Study/SeriesInstanceUID to import')
     parser.add_argument('--de-identify', action='store_true',
         help='De-identify dicoms before import')
-    parser.add_argument('--job-async', action='store_true',
+    parser.add_argument('--job_async', action='store_true',
         help='Do not wait for import job to finish')
     parser.add_argument('container', metavar='CONTAINER',
         help='Flywheel project to import into (group/proj)')

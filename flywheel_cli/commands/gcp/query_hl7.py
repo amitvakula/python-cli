@@ -23,20 +23,20 @@ def add_command(subparsers):
                                    description=QUERY_HL7_DESC,
                                    formatter_class=argparse.RawTextHelpFormatter)
 
-    profile = get_profile()
-    project = profile.get('project')
-    location = profile.get('location')
-    dataset = profile.get('hc_dataset')
-    hl7store = profile.get('hc_hl7store')
+    # profile = get_profile()
+    # project = profile.get('project')
+    # location = profile.get('location')
+    # dataset = profile.get('hc_dataset')
+    # hl7store = profile.get('hc_hl7store')
 
-    parser.add_argument('--project', metavar='NAME', default=project,
-                        help='GCP project (default: {})'.format(project))
-    parser.add_argument('--location', metavar='NAME', default=location,
-                        help='Location (default: {})'.format(location))
-    parser.add_argument('--dataset', metavar='NAME', default=dataset,
-                        help='Dataset (default: {})'.format(dataset))
-    parser.add_argument('--hl7store', metavar='NAME', default=hl7store,
-                        help='HL7 store (default: {})'.format(hl7store))
+    parser.add_argument('--project', metavar='NAME',
+                        help='GCP project (default: {})'.format('project'))
+    parser.add_argument('--location', metavar='NAME',
+                        help='Location (default: {})'.format('location'))
+    parser.add_argument('--dataset', metavar='NAME',
+                        help='Dataset (default: {})'.format('dataset'))
+    parser.add_argument('--hl7store', metavar='NAME',
+                        help='HL7 store (default: {})'.format('hl7store'))
     parser.add_argument('query', metavar='QUERY', nargs=argparse.REMAINDER,
                         help='HL7 filter query')
 

@@ -46,20 +46,20 @@ def add_command(subparsers):
         description=QUERY_DICOM_DESC,
         formatter_class=argparse.RawTextHelpFormatter)
 
-    profile = get_profile()
-    project = profile.get('project')
-    location = profile.get('location')
-    dataset = profile.get('hc_dataset')
-    dicomstore = profile.get('hc_dicomstore')
+    # profile = get_profile()
+    # project = profile.get('project')
+    # location = profile.get('location')
+    # dataset = profile.get('hc_dataset')
+    # dicomstore = profile.get('hc_dicomstore')
 
-    parser.add_argument('--project', metavar='NAME', default=project,
-        help='GCP project (default: {})'.format(project))
-    parser.add_argument('--location', metavar='NAME', default=location,
-        help='Location (default: {})'.format(location))
-    parser.add_argument('--dataset', metavar='NAME', default=dataset,
-        help='Dataset (default: {})'.format(dataset))
-    parser.add_argument('--dicomstore', metavar='NAME', default=dicomstore,
-        help='Dicomstore / table (default: {})'.format(dicomstore))
+    parser.add_argument('--project', metavar='NAME',
+        help='GCP project (default: {})'.format('project'))
+    parser.add_argument('--location', metavar='NAME',
+        help='Location (default: {})'.format('location'))
+    parser.add_argument('--dataset', metavar='NAME',
+        help='Dataset (default: {})'.format('dataset'))
+    parser.add_argument('--dicomstore', metavar='NAME',
+        help='Dicomstore / table (default: {})'.format('dicomstore'))
     parser.add_argument('--export', action='store_true',
         help='Export to BigQuery first (even if table exists)')
     parser.add_argument('sql', metavar='SQL WHERE', nargs=argparse.REMAINDER,

@@ -22,20 +22,20 @@ def add_command(subparsers):
                                    description=QUERY_FHIR_DESC,
                                    formatter_class=argparse.RawTextHelpFormatter)
 
-    profile = get_profile()
-    project = profile.get('project')
-    location = profile.get('location')
-    dataset = profile.get('hc_dataset')
-    fhirstore = profile.get('hc_fhirstore')
+    # profile = get_profile()
+    # project = profile.get('project')
+    # location = profile.get('location')
+    # dataset = profile.get('hc_dataset')
+    # fhirstore = profile.get('hc_fhirstore')
 
-    parser.add_argument('--project', metavar='NAME', default=project,
-                        help='GCP project (default: {})'.format(project))
-    parser.add_argument('--location', metavar='NAME', default=location,
-                        help='Location (default: {})'.format(location))
-    parser.add_argument('--dataset', metavar='NAME', default=dataset,
-                        help='Dataset (default: {})'.format(dataset))
-    parser.add_argument('--fhirstore', metavar='NAME', default=fhirstore,
-                        help='FHIR store (default: {})'.format(fhirstore))
+    parser.add_argument('--project', metavar='NAME',
+                        help='GCP project (default: {})'.format('project'))
+    parser.add_argument('--location', metavar='NAME',
+                        help='Location (default: {})'.format('location'))
+    parser.add_argument('--dataset', metavar='NAME',
+                        help='Dataset (default: {})'.format('dataset'))
+    parser.add_argument('--fhirstore', metavar='NAME',
+                        help='FHIR store (default: {})'.format('fhirstore'))
     parser.add_argument('--type', metavar='TYPE', help='FHIR resource type')
     parser.add_argument('query', metavar='QUERY', nargs=argparse.REMAINDER,
                         help='FHIR search query')
