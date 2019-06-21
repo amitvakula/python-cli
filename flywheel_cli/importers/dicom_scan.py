@@ -1,5 +1,6 @@
 import copy
 import gzip
+import itertools
 import logging
 import os
 import sys
@@ -21,11 +22,15 @@ class DicomSession(object):
         """Helper class that holds session properties and acquisitions"""
         self.context = context
         self.acquisitions = {}
+        self.secondary_acquisitions = {}  # Acquisitions that we don't have all
+                                          # of the info for yet
 class DicomAcquisition(object):
     def __init__(self, context):
         """Helper class that holds acquisition properties and files"""
         self.context = context
-        self.files = {}
+        self.files = {}  # Map of primary_series_uids to maps of series uids to filepaths
+                         # So that the primary series uid can be used to group multiple dicom series into one acquisition
+        self.filenames = {}  # A map of series uid to filenames
 
 # Specifying just the list of tags we're interested in speeds up dicom scanning
 DICOM_TAGS = [
@@ -48,8 +53,15 @@ DICOM_TAGS = [
     'PatientBirthDate',
     'SOPInstanceUID'
 ]
-def _at_stack_id(tag, VR, length):
-    return tag == (0x0020, 0x9056)
+
+def _at_stack_id(related_acquisitions):
+    if related_acquisitions:
+        stop_tag = (0x3006, 0x0011)
+    else:
+        stop_tag = (0x0020, 0x9056)
+    def f(tag, VR, length):
+        return tag == stop_tag
+    return f
 
 class DicomScanner(AbstractScanner):
     # The session label dicom header key
@@ -61,8 +73,10 @@ class DicomScanner(AbstractScanner):
 
         if config:
             self.deid_profile = config.deid_profile
+            self.related_acquisitions = config.related_acquisitions
         else:
             self.deid_profile = None
+            self.related_acquisitions = False
 
         self.profile = None  # Dicom file profile
         self.subject_map = None  # Provides subject mapping services
@@ -83,6 +97,8 @@ class DicomScanner(AbstractScanner):
         if self.subject_map:
             subject_cfg = self.subject_map.get_config()
             tags += [ Tag(tag_for_keyword(keyword)) for keyword in subject_cfg.fields ]
+        if self.related_acquisitions:
+            tags += [ Tag(tag_for_keyword('ReferencedFrameOfReferenceSequence')) ]
 
         # First step is to walk and sort files
         sys.stdout.write('Scanning directories...'.ljust(80) + '\r')
@@ -109,19 +125,28 @@ class DicomScanner(AbstractScanner):
                     # Don't decode while scanning, stop as early as possible
                     # TODO: will we ever rely on fields after stack id for subject mapping
                     dcm = DicomFile(f, parse=False, session_label_key=self.session_label_key,
-                        decode=False, stop_when=_at_stack_id, update_in_place=False, specific_tags=tags)
+                        decode=self.related_acquisitions, stop_when=_at_stack_id(self.related_acquisitions), update_in_place=False, specific_tags=tags)
                     acquisition = self.resolve_acquisition(context, dcm)
 
                     sop_uid = self.get_value(dcm, 'SOPInstanceUID', required=True)
-                    if sop_uid in acquisition.files:
-                        orig_path = acquisition.files[sop_uid]
+                    series_uid = self.get_value(dcm, 'SeriesInstanceUID', required=True)
+                    if sop_uid in acquisition.files.setdefault(series_uid, {}):
+                        orig_path = acquisition.files[series_uid][sop_uid]
 
                         if not util.files_equal(walker, full_path, orig_path):
                             message = ('DICOM conflicts with {}! Both files have the '
                                 'same IDs, but contents differ!').format(orig_path)
                             self.report_file_error(audit_log, full_path, msg=message)
                     else:
-                        acquisition.files[sop_uid] = path
+                        acquisition.files[series_uid][sop_uid] = path
+
+                    # Add a filename for that series uid
+                    if series_uid not in acquisition.filenames:
+                        acquisition_timestamp = self.determine_acquisition_timestamp(dcm)
+                        series_label = self.determine_acquisition_label(acquisition.context,
+                            dcm, series_uid, timestamp=acquisition_timestamp)
+                        filename = DicomScanner.determine_dicom_zipname(acquisition.filenames, series_label)
+                        acquisition.filenames[series_uid] = filename
 
             except DicomFileError as exc:
                 if util.is_dicom_file(path):
@@ -139,13 +164,33 @@ class DicomScanner(AbstractScanner):
             session_context = copy.deepcopy(context)
             session_context.update(session.context)
 
-            for acquisition in session.acquisitions.values():
+            for acquisition in itertools.chain(session.acquisitions.values(), session.secondary_acquisitions.values()):
                 acquisition_context = copy.deepcopy(session_context)
                 acquisition_context.update(acquisition.context)
-                files = list(acquisition.files.values())
+                for series_uid, files in acquisition.files.items():
 
-                container = container_factory.resolve(acquisition_context)
-                container.packfiles.append(PackfileDescriptor('dicom', files, len(files)))
+                    files = list(files.values())
+                    filename = acquisition.filenames.get(series_uid)
+
+                    container = container_factory.resolve(acquisition_context)
+                    container.packfiles.append(PackfileDescriptor('dicom', files, len(files), filename))
+
+    @staticmethod
+    def determine_dicom_zipname(filenames, series_label):
+        """Return a filename for the dicom series that is unique to a container
+
+        Args:
+            filenames (dict): A map of series uids to filenames
+            series_label (str): The base to use for the filename
+
+        Returns:
+            str: The filename for the zipped up series
+        """
+        filename = series_label + '.dicom.zip'
+        duplicate = 1
+        while filename in filenames.values():
+            filename = series_label + '_dup-{}.dicom.zip'.format(duplicate)
+        return filename
 
     def resolve_session(self, context, dcm):
         """Find or create a sesson from a dcm file. """
@@ -181,14 +226,32 @@ class DicomScanner(AbstractScanner):
         """Find or create an acquisition from a dcm file. """
         session = self.resolve_session(context, dcm)
         series_uid = self.get_value(dcm, 'SeriesInstanceUID', required=True)
-        if series_uid not in session.acquisitions:
-            # Get acquisition timestamp (based on manufacturer)
-            if dcm.get_manufacturer() == 'SIEMENS':
-                acquisition_timestamp = self.get_timestamp(dcm, 'SeriesDate', 'SeriesTime')
-            else:
-                acquisition_timestamp = self.get_timestamp(dcm, 'AcquisitionDate', 'AcquisitionTime')
+        primary_acquisition_file = True
+        if self.related_acquisitions and dcm.get('ReferencedFrameOfReferenceSequence'):
+            # We need to add it to the acquisition of the primary series uid
+            try:
+                series_uid = dcm.get(
+                    'ReferencedFrameOfReferenceSequence'
+                )[0].get(
+                    'RTReferencedStudySequence'
+                )[0].get(
+                    'RTReferencedSeriesSequence'
+                )[0].get(
+                    'SeriesInstanceUID'
+                )
+                primary_acquisition_file = False
+            except (TypeError, IndexError, AttributeError) as e:
+                log.warning('Unable to find related series for file {}. Uploading into its own acquisition')
 
-            session.acquisitions[series_uid] = DicomAcquisition({
+
+        if series_uid not in session.acquisitions:
+            # full acquisition doesn't exists
+            if not primary_acquisition_file and series_uid in session.secondary_acquisitions:
+                # The secondary acquisition exists
+                return session.secondary_acquisitions[series_uid]
+
+            acquisition_timestamp = self.determine_acquisition_timestamp(dcm)
+            acquisition = DicomAcquisition({
                 'acquisition': {
                     'uid': series_uid.replace('.', ''),
                     'label': self.determine_acquisition_label(context, dcm, series_uid, timestamp=acquisition_timestamp),
@@ -197,7 +260,21 @@ class DicomScanner(AbstractScanner):
                 }
             })
 
-        return session.acquisitions[series_uid]
+            if primary_acquisition_file:
+                # Check for a secondary and add it the files and filenames to the primary
+                if series_uid in session.secondary_acquisitions:
+                    acquisition.files = session.secondary_acquisitions.get(series_uid).files
+                    acquisition.filenames = session.secondary_acquisitions.pop(series_uid).filenames
+
+                session.acquisitions[series_uid] = acquisition
+                return session.acquisitions[series_uid]
+            else:
+                session.secondary_acquisitions[series_uid] = acquisition
+                return session.secondary_acquisitions[series_uid]
+
+        else:
+            # Acquisition already exists
+            return session.acquisitions[series_uid]
 
     def determine_session_label(self, context, _dcm, uid, timestamp=None):
         """Determine session label from DICOM headers"""
@@ -218,6 +295,15 @@ class DicomScanner(AbstractScanner):
         if not name:
             name = uid
         return name
+
+    def determine_acquisition_timestamp(self, dcm):
+        # Create the acquisition because the acqusition doesn't exist
+        # Get acquisition timestamp (based on manufacturer)
+        if dcm.get_manufacturer() == 'SIEMENS':
+            timestamp = self.get_timestamp(dcm, 'SeriesDate', 'SeriesTime')
+        else:
+            timestamp = self.get_timestamp(dcm, 'AcquisitionDate', 'AcquisitionTime')
+        return timestamp
 
     def get_timestamp(self, dcm, date_key, time_key):
         """Get a timestamp value"""

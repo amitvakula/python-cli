@@ -100,6 +100,8 @@ class Config(object):
         if self.audit_log:
             self.audit_log = getattr(args, 'audit_log_path', None) or True
 
+        self.related_acquisitions = getattr(args, 'related_acquisitions', False)
+
         self.walk_filters = {
             'filter': getattr(args, 'filter', []),
             'exclude': getattr(args, 'exclude', []),
@@ -229,6 +231,7 @@ class Config(object):
         parser.add_argument('--private-dicom-tags', help='Path to a private dicoms csv file')
         parser.add_argument('--ignore-unknown-tags', action='store_true', help='Ignore unknown dicom tags')
         parser.add_argument('--encodings', help='Set character encoding aliases. E.g. win_1251=cp1251')
+        parser.add_argument('--related-acquisitions', action='store_true', help='Store related dicoms in the same acquisition')
         return parser
 
     @staticmethod
