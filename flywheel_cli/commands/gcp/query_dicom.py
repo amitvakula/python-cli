@@ -1,7 +1,7 @@
 import argparse
 import itertools
 import sys
-
+from healthcare_api.client import Client, base
 from .auth import get_token
 from .flywheel_gcp import GCP, GCPError
 from .profile import get_profile
@@ -47,10 +47,17 @@ def add_command(subparsers):
         formatter_class=argparse.RawTextHelpFormatter)
 
     # profile = get_profile()
+    # print(profile)
     # project = profile.get('project')
     # location = profile.get('location')
     # dataset = profile.get('hc_dataset')
     # dicomstore = profile.get('hc_dicomstore')
+
+    #print(get_token())
+    # client = Client(get_token)
+    # locations = client.list_locations('healthcare-api-214323')
+    # print(locations)
+    # datasets = client.list_datasets('us-central1')
 
     parser.add_argument('--project', metavar='NAME',
         help='GCP project (default: {})'.format('project'))
@@ -88,7 +95,7 @@ def query_dicom(args):
     query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=' '.join(args.sql) or '1=1')
     try:
         result = gcp.bq.run_query(args.project, query)
-    except GCPError as ex:
+    except base.GCPError as ex:
         raise CliError(str(ex))
     hierarchy = result_to_hierarchy(result)
     summary = 'Query matched {total_studies} studies, {total_series} series, {total_images} images'.format(**hierarchy)
