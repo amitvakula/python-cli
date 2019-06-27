@@ -1,11 +1,15 @@
 import argparse
 import itertools
 import sys
+import json
 from healthcare_api.client import Client, base
 from .auth import get_token
 from .flywheel_gcp import GCP, GCPError
 from .profile import get_profile
 from ...errors import CliError
+from google.cloud import bigquery
+import google.oauth2.credentials
+
 
 QUERY_DICOM_DESC = """
 Run assisted SQL query (only WHERE clause needed) on a BigQuery table exported
@@ -46,18 +50,11 @@ def add_command(subparsers):
         description=QUERY_DICOM_DESC,
         formatter_class=argparse.RawTextHelpFormatter)
 
-    # profile = get_profile()
-    # print(profile)
+    profile = get_profile()
     # project = profile.get('project')
     # location = profile.get('location')
     # dataset = profile.get('hc_dataset')
     # dicomstore = profile.get('hc_dicomstore')
-
-    #print(get_token())
-    # client = Client(get_token)
-    # locations = client.list_locations('healthcare-api-214323')
-    # print(locations)
-    # datasets = client.list_datasets('us-central1')
 
     parser.add_argument('--project', metavar='NAME',
         help='GCP project (default: {})'.format('project'))
@@ -86,15 +83,40 @@ def query_dicom(args):
         if not getattr(args, param, None):
             raise CliError(param + ' required')
 
-    gcp = GCP(get_token)
-    if args.export or args.dicomstore not in gcp.bq.list_tables(args.project, args.dataset):
+    def list_table_ids(tables):
+        table_ids = []
+        for table in tables:
+            table_ids.append(table.table_id)
+        return table_ids
+
+    def parse_query_result(query_job, query_result):
+        result = {
+            'query_id': query_job.job_id,
+            'rows': []
+            }
+        for row in query_result:
+            result['rows'].append(row)
+        return result
+
+    credentials = google.oauth2.credentials.Credentials(get_token())
+    hc_client = Client(get_token)
+    bq_client = bigquery.Client(args.project, credentials)
+    store_name = 'projects/{}/locations/{}/datasets/{}/dicomStores/{}'.format(args.project, args.location, args.dataset, args.dicomstore)
+    tables = bq_client.list_tables('{}.{}'.format(args.project, args.dataset))
+    table = bq_client.get_table('{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
+    print(args.sql)
+    if args.export or args.dicomstore not in list_table_ids(tables):   # gcp.bq.list_tables(args.project, args.dataset):
         print('Exporting Healthcare API dicomstore to BigQuery')
-        gcp.hc.export_to_bigquery(args.project, args.location, args.dataset, args.dicomstore)
+        hc_client.export_dicom_to_bigquery(store_name, table.self_link) # TODO (permission error or not found at the moment)
+        # gcp.hc.export_to_bigquery(args.project, args.location, args.dataset, args.dicomstore)
 
     # TODO enable raw queries (?)
     query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=' '.join(args.sql) or '1=1')
     try:
-        result = gcp.bq.run_query(args.project, query)
+        query_job = bq_client.query(query)  # API request
+        query_result = query_job.result()
+        result = parse_query_result(query_job, query_result)
+
     except base.GCPError as ex:
         raise CliError(str(ex))
     hierarchy = result_to_hierarchy(result)
