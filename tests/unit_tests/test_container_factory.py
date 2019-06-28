@@ -120,6 +120,9 @@ def test_resolve_acquisition():
     acquisition_context2 = copy.deepcopy(acquisition_context)
     acquisition_context2['acquisition']['uid'] = '5678'
 
+    result = factory.resolve(acquisition_context2, create=False)
+    assert result is None
+
     result = factory.resolve(acquisition_context2)
     assert result is not None
     assert result.container_type == 'acquisition'

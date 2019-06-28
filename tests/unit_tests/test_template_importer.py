@@ -14,11 +14,11 @@ from .test_container_factory import MockContainerResolver
 from .test_folder_importer import mock_fs, make_config
 from .test_template_string import project_pattern, subject_pattern, session_pattern
 
-def make_importer(resolver, template='', **kwargs):
+def make_importer(resolver, template='', config_args=None, **kwargs):
     assert template
     template_list = yaml.load(template)
 
-    config = make_config(resolver)
+    config = make_config(resolver, args=config_args)
     importer = FolderImporter(config=config, **kwargs)
     importer.root_node = parse_template_list(template_list, config)
 
@@ -341,6 +341,146 @@ def test_slurp_scanner():
     assert child.container_type == 'acquisition'
     assert child.label == 'README'
     assert child.files == ['20030415_Scan_POD_S502_m1&2_0hr/README']
+
+    try:
+        next(itr)
+        pytest.fail('Unexpected container found')
+    except StopIteration:
+        pass
+
+def test_dicom_scanner(temp_fs, dicom_data):
+    tmpfs, tmpfs_url = temp_fs(collections.OrderedDict({
+        'project_label/subj1': [
+            'subj_file.txt',
+        ],
+        'project_label/subj1/1001': [
+            'session_file.txt',
+        ],
+        'project_label/subj1/1001/acq01': [
+            'acquisition_file.csv',
+            'acquisition_file.txt',
+        ],
+        'project_label/subj1/1001/acq01/DICOM': [
+            ('001.dcm', dicom_data('16844_1_1_dicoms', 'MR.1.2.840.113619.2.408.5282380.5220731.23348.1516669692.164.dcm'))
+        ],
+    }))
+
+    resolver = MockContainerResolver()
+    importer = make_importer(resolver, group='unsorted', template=r"""
+    - pattern: "{project}"
+    - pattern: "{subject}"
+    - pattern: "{session}"
+    - pattern: "{acquisition}"
+    - pattern: "DICOM"
+      scan: dicom
+    """, config_args={'no_uids': True})
+
+    walker = PyFsWalker(tmpfs_url, src_fs=tmpfs)
+    importer.discover(walker)
+
+    itr = iter(importer.container_factory.walk_containers())
+
+    _, child = next(itr)
+    assert child.container_type == 'group'
+    assert child.id == 'unsorted'
+
+    _, child = next(itr)
+    assert child.container_type == 'project'
+    assert child.label == 'project_label'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'subject'
+    assert child.label == 'subj1'
+    assert len(child.files) == 1
+    assert '/project_label/subj1/subj_file.txt' in child.files
+
+    _, child = next(itr)
+    assert child.container_type == 'session'
+    assert child.label == '1001'
+    assert len(child.files) == 1
+    assert '/project_label/subj1/1001/session_file.txt' in child.files
+
+    _, child = next(itr)
+    assert child.container_type == 'acquisition'
+    assert child.label == 'acq01'
+
+    assert len(child.files) == 2
+    assert '/project_label/subj1/1001/acq01/acquisition_file.csv' in child.files
+    assert '/project_label/subj1/1001/acq01/acquisition_file.txt' in child.files
+
+    assert len(child.packfiles) == 1
+    desc = child.packfiles[0]
+    assert desc.packfile_type == 'dicom'
+    assert desc.path == ['project_label/subj1/1001/acq01/DICOM/001.dcm']
+    assert desc.count == 1
+
+    try:
+        next(itr)
+        pytest.fail('Unexpected container found')
+    except StopIteration:
+        pass
+
+
+def test_dicom_scanner_missing_session_attachments(temp_fs, dicom_data):
+    tmpfs, tmpfs_url = temp_fs(collections.OrderedDict({
+        'project_label/subj1': [
+            'subj_file.txt',
+        ],
+        'project_label/subj1/1001': [
+            'session_file.txt',
+        ],
+        'project_label/subj1/1001/acq01': [
+            ('001.dcm', dicom_data('16844_1_1_dicoms', 'MR.1.2.840.113619.2.408.5282380.5220731.23348.1516669692.164.dcm'))
+        ],
+    }))
+
+    resolver = MockContainerResolver()
+    importer = make_importer(resolver, group='unsorted', template=r"""
+    - pattern: "{project}"
+    - pattern: "{subject}"
+    - pattern: "{session}"
+    - pattern: ".*"
+      scan: dicom
+    """, config_args={'no_uids': True})
+
+    walker = PyFsWalker(tmpfs_url, src_fs=tmpfs)
+    importer.discover(walker)
+
+    itr = iter(importer.container_factory.walk_containers())
+
+    _, child = next(itr)
+    assert child.container_type == 'group'
+    assert child.id == 'unsorted'
+
+    _, child = next(itr)
+    assert child.container_type == 'project'
+    assert child.label == 'project_label'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'subject'
+    assert child.label == 'subj1'
+    assert len(child.files) == 1
+    assert '/project_label/subj1/subj_file.txt' in child.files
+
+    _, child = next(itr)
+    assert child.container_type == 'session'
+    assert child.label == '1001'
+    assert len(child.files) == 1
+    assert '/project_label/subj1/1001/session_file.txt' in child.files
+
+    _, child = next(itr)
+    assert child.container_type == 'acquisition'
+    assert child.label == '3Plane Loc fgre'  # From the DICOM Header
+
+    assert len(child.files) == 0
+
+    assert len(child.packfiles) == 1
+    desc = child.packfiles[0]
+    assert desc.packfile_type == 'dicom'
+    assert desc.path == ['project_label/subj1/1001/acq01/001.dcm']
+    assert desc.count == 1
 
     try:
         next(itr)

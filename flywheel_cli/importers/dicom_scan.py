@@ -289,6 +289,10 @@ class DicomScanner(AbstractScanner):
 
     def determine_acquisition_label(self, context, dcm, uid, timestamp=None):
         """Determine acquisition label from DICOM headers"""
+        acquisition_label = context.get('acquisition', {}).get('label')
+        if acquisition_label:
+            return acquisition_label
+
         name = self.get_value(dcm, 'SeriesDescription')
         if not name and timestamp:
             name = timestamp.strftime('%Y-%m-%d %H:%M:%S')

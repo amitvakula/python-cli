@@ -96,7 +96,7 @@ class ContainerFactory(object):
         """Check if any nodes have been added to the root node"""
         return not bool(self.root.children)
 
-    def resolve(self, context):
+    def resolve(self, context, create=True):
         """Given a context with hierarchy definitions, returns a ContainerNode if resolved.
 
         If the node definition is ambiguous (i.e. missing an intermediate level such as project), then this
@@ -104,6 +104,7 @@ class ContainerFactory(object):
 
         Arguments:
             context (dict): The context containing the node definition
+            create (bool): Whether or not to create the container if it doesn't exist
 
         Returns:
             ContainerNode: If the container node was resolved in the tree.
@@ -119,7 +120,9 @@ class ContainerFactory(object):
                     return None
 
                 last = current
-                current = self._resolve_child(current, container, context, path)
+                current = self._resolve_child(current, container, context, path, create)
+                if current is None:
+                    return None
                 path = combine_path(path, self.resolver.path_el(current))
             else:
                 if current:
@@ -222,13 +225,14 @@ class ContainerFactory(object):
 
         return uid_count, conflict_containers
 
-    def _resolve_child(self, parent, container_type, context, path):
+    def _resolve_child(self, parent, container_type, context, path, create):
         """Resolve a child by searching the parent, or creating a new node
 
         Arguments:
             parent (ContainerNode): The parent node
             container_type (str): The container type
             context (dict): The context object
+            create (bool): Whether or not to create missing nodes
 
         Returns:
             ContainerNode: The new or existing container node
@@ -249,6 +253,9 @@ class ContainerFactory(object):
                     child.id = cid
 
                 return child
+
+        if not create:
+            return None
 
         # Create child
         child = ContainerNode(container_type, cid=cid, label=label, uid=uid, parent=parent)

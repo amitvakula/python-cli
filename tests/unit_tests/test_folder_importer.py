@@ -15,13 +15,21 @@ def mock_fs(structure):
     for path, files in structure.items():
         with mockfs.makedirs(path, recreate=True) as subdir:
             for name in files:
-                with subdir.open(name, 'w') as f:
-                    f.write('Hello World!')
+                if isinstance(name, tuple):
+                    name, content = name
+                else:
+                    content = b'Hello World'
+
+                with subdir.open(name, 'wb') as f:
+                    f.write(content)
 
     return mockfs
 
-def make_config(resolver):
-    config = Config()
+def make_config(resolver, args=None):
+    if args is not None:
+        from argparse import Namespace
+        args = Namespace(**args)
+    config = Config(args=args)
     config._resolver = resolver
     return config
 

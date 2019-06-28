@@ -166,21 +166,19 @@ class FolderImporter(AbstractImporter):
                         queue.put(VisitTarget(child_path, resolve_child, child_context, next_node))
 
         # Resolve the container
-        if resolve:
-            if self.merge_subject_and_session:
-                self._context_merge_subject_and_session(context)
+        if self.merge_subject_and_session:
+            self._context_merge_subject_and_session(context)
 
-            container = self.container_factory.resolve(context)
-            if container:
-                files = context.get('files')
-                packfile_desc = context.get('packfile_desc')
-
-                if packfile_desc is not None:
-                    container.packfiles.append(packfile_desc)
-                elif files:
-                    container.files.extend(files)
-            else:
-                self.messages.append(('warn', 'Ignoring files for folder {} because it represents an ambiguous node'.format(target.path)))
+        container = self.container_factory.resolve(context, create=resolve)
+        if container:
+            packfile_desc = context.get('packfile_desc')
+            # If we didn't create the container, just append files, not packfiles
+            if not resolve or packfile_desc is None:
+                container.files.extend(context.get('files', []))
+            elif packfile_desc is not None:
+                container.packfiles.append(packfile_desc)
+        elif resolve:
+            self.messages.append(('warn', 'Ignoring files for folder {} because it represents an ambiguous node'.format(target.path)))
 
     def _context_merge_subject_and_session(self, context):
         """Merge session & subject labels"""
