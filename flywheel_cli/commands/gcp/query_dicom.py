@@ -66,6 +66,10 @@ def add_command(subparsers):
         help='Dicomstore / table (default: {})'.format('dicomstore'))
     parser.add_argument('--export', action='store_true',
         help='Export to BigQuery first (even if table exists)')
+    parser.add_argument('--new_dataset', metavar='NAME',
+        help='Export to new BigQuery dataset destination (requires --export)')
+    parser.add_argument('--new_table', metavar='NAME',
+        help='Export to new BigQuery table (requires --new_dataset)')
     parser.add_argument('sql', metavar='SQL WHERE', nargs=argparse.REMAINDER,
         help='SQL WHERE clause')
     parser.add_argument('--studies', action='store_true',
@@ -105,16 +109,30 @@ def query_dicom(args):
             where = args.sql[1].split('=')
             return '{}="{}"'.format(where[0], where[1])
 
-    def dataset_availability_controller(dataset_list, args, bigquery, bq_client):
+    def create_bigquery_dataset(project, new_dataset, bigquery, bq_client):
+        dataset = bigquery.Dataset('{}.{}'.format(project, new_dataset))
+        dataset.location = 'US'
+        dataset = bq_client.create_dataset(dataset)
+
+    def export_controller(dataset_list, args, bigquery, bq_client):
         datasets = []
         for dataset in dataset_list:
             datasets.append(dataset.dataset_id)
-        if args.dataset in datasets:
+        if args.new_dataset in datasets:
+            print('dataset already exists')
             return
+        elif args.new_dataset:
+            print('new dataset detected')
+            create_bigquery_dataset(args.project, args.new_dataset, bigquery, bq_client)
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.new_dataset, args.new_table or args.dicomstore))
+        elif args.dataset in datasets:
+            print('dataset ok, but no table, creating...')
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
         else:
-            dataset = bigquery.Dataset('{}.{}'.format(args.project, args.dataset))
-            dataset.location = 'US'
-            dataset = bq_client.create_dataset(dataset)
+            print('dataset not in bq yet, creating...')
+            create_bigquery_dataset(args.project, args.dataset, bigquery, bq_client)
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
+
 
     credentials = google.oauth2.credentials.Credentials(get_token())
     hc_client = Client(get_token)
@@ -124,8 +142,8 @@ def query_dicom(args):
 
     if args.export or args.dicomstore not in list_table_ids(tables):
         print('Exporting Healthcare API dicomstore to BigQuery')
-        dataset_availability_controller(list(bq_client.list_datasets()), args, bigquery, bq_client)
-        hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
+        export_controller(list(bq_client.list_datasets()), args, bigquery, bq_client)
+        # hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
 
     # TODO enable raw queries (?)
     query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=parse_query_condition(args.sql) or '1=1')
