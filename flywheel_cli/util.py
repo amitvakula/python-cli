@@ -32,7 +32,7 @@ METADATA_EXPR = {
 }
 
 
-NO_FILE_CONTAINERS = [ 'group', 'subject' ]
+NO_FILE_CONTAINERS = [ 'group' ]
 
 try:
     DEFAULT_TZ = tzlocal.get_localzone()
