@@ -487,3 +487,126 @@ def test_dicom_scanner_missing_session_attachments(temp_fs, dicom_data):
         pytest.fail('Unexpected container found')
     except StopIteration:
         pass
+
+def test_filename_scanner_constructor():
+    resolver = MockContainerResolver()
+    # Should raise for missing filename
+    importer = make_importer(resolver, group='unsorted', template=r"""
+    - pattern: "{project}"
+    - pattern: "{session}"
+      scan:
+        name: filename
+        pattern: "{acquisition}"
+    """)
+
+    result = importer.root_node
+
+    assert result
+    assert result.template.pattern == project_pattern
+    assert result.packfile_type == None
+
+    result = result.next_node
+    assert result
+    assert result.template.pattern == session_pattern
+    assert result.packfile_type == None
+
+    result = result.next_node
+    assert result
+    assert result.opts == {'pattern': '{acquisition}'}
+
+    with pytest.raises(ValueError):
+        # Filename pattern is required
+        make_importer(resolver, group='unsorted', template=r"""
+        - pattern: "{project}"
+        - pattern: "{session}"
+          scan:
+            name: filename
+        """)
+
+    with pytest.raises(ValueError):
+        # validate filename pattern
+        make_importer(resolver, group='unsorted', template=r"""
+        - pattern: "{project}"
+        - pattern: "{session}"
+          scan:
+            name: filename
+            pattern: "["
+        """)
+
+
+def test_filename_scanner():
+    # Normal discovery
+    mockfs = mock_fs(collections.OrderedDict({
+        'project1': [
+            'project_file.txt',
+        ],
+        'project1/sub1': [
+            'sess01-scan1.dicom.zip',
+            'sess02-scan1.dicom.zip',
+            'sess02-scan1.events.tsv',
+            'subject_file.txt',
+        ],
+    }))
+
+    resolver = MockContainerResolver()
+    importer = make_importer(resolver, group='unsorted', template=r"""
+    - pattern: "{project}"
+    - pattern: "{subject}"
+      scan:
+        name: filename
+        pattern: "{session}-(?P<acquisition>\\w+)\\..+"
+    """)
+
+    walker = PyFsWalker('mockfs://', src_fs=mockfs)
+    importer.discover(walker)
+
+    itr = iter(importer.container_factory.walk_containers())
+
+    _, child = next(itr)
+    assert child.container_type == 'group'
+    assert child.id == 'unsorted'
+
+    _, child = next(itr)
+    assert child.container_type == 'project'
+    assert child.label == 'project1'
+
+    assert len(child.files) == 1
+    assert '/project1/project_file.txt' in child.files
+
+    _, child = next(itr)
+    assert child.container_type == 'subject'
+    assert child.label == 'sub1'
+    # Non-matching files should still be added in the best possible place
+    assert len(child.files) == 1
+    assert 'project1/sub1/subject_file.txt' in child.files
+
+    _, child = next(itr)
+    assert child.container_type == 'session'
+    assert child.label == 'sess01'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'session'
+    assert child.label == 'sess02'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'acquisition'
+    assert child.label == 'scan1'
+
+    assert len(child.files) == 1
+    assert 'project1/sub1/sess01-scan1.dicom.zip' in child.files
+
+    _, child = next(itr)
+    assert child.container_type == 'acquisition'
+    assert child.label == 'scan1'
+
+    assert len(child.files) == 2
+    assert 'project1/sub1/sess02-scan1.dicom.zip' in child.files
+    assert 'project1/sub1/sess02-scan1.events.tsv' in child.files
+
+    try:
+        next(itr)
+        pytest.fail('Unexpected container found')
+    except StopIteration:
+        pass

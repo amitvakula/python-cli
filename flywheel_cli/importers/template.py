@@ -3,15 +3,12 @@ import re
 
 from abc import ABC, abstractmethod
 from typing.re import Pattern
-from ..util import (
-    METADATA_ALIASES,
-    python_id_to_str,
-    regex_for_property,
-    set_nested_attr,
-    str_to_python_id
-)
+
+from . import match_util
+from ..util import KeyWithOptions
 
 from .dicom_scan import DicomScanner
+from .file_scan import FilenameScanner
 from .parrec_scan import ParRecScanner
 from .slurp_scan import SlurpScanner
 
@@ -19,6 +16,7 @@ SCANNER_CLASSES = {
     'dicom': DicomScanner,
     'parrec': ParRecScanner,
     'slurp': SlurpScanner,
+    'filename': FilenameScanner
 }
 
 class ImportTemplateNode(ABC):
@@ -89,28 +87,12 @@ class StringMatchNode(ImportTemplateNode):
         self.next_node = next_node
 
     def extract_metadata(self, name, context, walker=None, path=None):
-        groups = {}
-
-        if isinstance(self.template, Pattern):
-            m = self.template.match(name)
-            if not m:
-                return None
-            groups = m.groupdict()
-        else:
-            groups[self.template] = name
-
         if self.ignore:
             context['ignore'] = True
             return None
 
-        for key, value in groups.items():
-            if value:
-                key = python_id_to_str(key)
-
-                if key in METADATA_ALIASES:
-                    key = METADATA_ALIASES[key]
-
-                set_nested_attr(context, key, value)
+        if not match_util.extract_metadata_attributes(name, self.template, context):
+            return None
 
         if callable(self.metadata_fn):
             self.metadata_fn(name, context, walker, path=path)
@@ -162,9 +144,10 @@ class CompositeNode(ImportTemplateNode):
 class ScannerNode(ImportTemplateNode):
     node_type = 'scanner'
 
-    def __init__(self, config, scanner_cls):
+    def __init__(self, config, scanner_cls, opts=None):
         self.config = config
         self.scanner_cls = scanner_cls
+        self.opts = opts or {}
 
     def set_next(self, next_node):
         """Set the next node"""
@@ -185,7 +168,7 @@ class ScannerNode(ImportTemplateNode):
         Returns:
             list: The list of warning/error messages
         """
-        scanner = self.scanner_cls(self.config)
+        scanner = self.scanner_cls(self.config, **self.opts)
         scanner.discover(src_fs, context, container_factory,
                 path_prefix=path_prefix, audit_log=audit_log)
         return scanner.messages
@@ -195,33 +178,24 @@ class ScannerNode(ImportTemplateNode):
 
 
 def parse_list_item(item, last=None, config=None):
-    # Ensure dict, allows shorthand in config file
-    if isinstance(item, str):
-        item = {'pattern': item}
-
     if 'select' in item:
         # Composite node
         children = [parse_list_item(child, config=config) for child in item['select']]
         node = CompositeNode(children)
     else:
+        # Ensure dict, allows shorthand in config file
+        item = KeyWithOptions(item, key='pattern')
 
         # Otherwise, expect a pattern
-        match = compile_regex(item['pattern'])
-
-        # Create a copy to create opts
-        opts = item.copy()
-        opts.pop('pattern')
+        match = match_util.compile_regex(item.key)
 
         #Create the next node
-        scan = opts.pop('scan', None)
-        node = StringMatchNode(template=match, **opts)
+        scan = item.config.pop('scan', None)
+        node = StringMatchNode(template=match, **item.config)
 
         # Add scanner node
         if scan:
-            scanner_cls = SCANNER_CLASSES.get(scan)
-            if not scanner_cls:
-                raise ValueError('Unknown scanner class: {}'.format(scan))
-            next_node = ScannerNode(config, scanner_cls)
+            next_node = _create_scanner_node(scan, config)
             node.set_next(next_node)
 
     if last is not None:
@@ -271,7 +245,7 @@ def parse_template_string(value, config=None):
             match, optstr = parts
 
         # Compile the match string into a regular expression
-        match = compile_regex(match)
+        match = match_util.compile_regex(match)
 
         # Parse the options
         opts = _parse_optstr(optstr)
@@ -287,59 +261,24 @@ def parse_template_string(value, config=None):
 
         # Add scanner node
         if scan:
-            scanner_cls = SCANNER_CLASSES.get(scan)
-            if not scanner_cls:
-                raise ValueError('Unknown scanner class: {}'.format(scan))
-            node = ScannerNode(config, scanner_cls)
+            node = _create_scanner_node(scan, config)
             last.set_next(node)
             last = node
 
     return root
 
 
-IS_PROPERTY_RE = re.compile(r'^[a-z]([-_a-zA-Z0-9\.]+)([a-zA-Z0-9])$')
+def _create_scanner_node(scan, config):
+    scan = KeyWithOptions(scan)
 
-def compile_regex(value):
-    """Compile a regular expression from a template string
+    scanner_cls = SCANNER_CLASSES.get(scan.key)
+    if not scanner_cls:
+        raise ValueError(f'Unknown scanner class: {scan.key}')
 
-    Args:
-        value (str): The value to compile
+    # Validate opts
+    scanner_cls.validate_opts(scan.config)
+    return ScannerNode(config, scanner_cls, opts=scan.config)
 
-    Returns:
-        Pattern: The compiled regular expression
-    """
-    regex = ''
-    escape = False
-    repl = ''
-    in_repl = False
-    for c in value:
-        if escape:
-            regex = regex + '\\' + c
-            escape = False
-        else:
-            if c == '\\':
-                escape = True
-            elif c == '{':
-                in_repl = True
-            elif c == '}':
-                in_repl = False
-                if IS_PROPERTY_RE.match(repl):
-                    # Replace value
-                    regex = regex + '(?P<{}>{})'.format(repl, regex_for_property(repl))
-                else:
-                    regex = regex + '{' + repl + '}'
-                repl = ''
-            elif in_repl:
-                repl = repl + c
-            else:
-                regex = regex + c
-
-    # Finally, replace group ids with valid strings
-    regex = re.sub(r'(?<!\\)\(\?P<([^>]+)>', _group_str_to_id, regex)
-    return re.compile(regex)
-
-def _group_str_to_id(m):
-    return '(?P<{}>'.format( str_to_python_id(m.group(1)) )
 
 def _parse_optstr(val):
     result = {}

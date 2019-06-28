@@ -45,3 +45,7 @@ class AbstractScanner(ABC):
         # Add it as a message
         # TODO: Configurable warnings-as-errors?
         self.messages.append(('warn', log_msg))
+
+    @staticmethod
+    def validate_opts(opts):
+        """Validate the scanner options, raising a ValueError if invalid"""

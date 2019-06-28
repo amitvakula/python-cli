@@ -350,3 +350,18 @@ def get_cli_version():
     except:
         version = 'undetermined'
     return version
+
+class KeyWithOptions:
+    """Encapsulates user-provided configuration where a key field is required.
+
+    Accepts either a dictionary or any other primitive.
+    If given a dictionary, pops <key> from the dictionary, and stores it as an attribute.
+    Otherwise takes the provided value and stores it as an attribute
+    """
+    def __init__(self, value, key='name'):
+        if isinstance(value, dict):
+            self.config = value.copy()
+            self.key = self.config.pop(key)
+        else:
+            self.key = value
+            self.config = {}
