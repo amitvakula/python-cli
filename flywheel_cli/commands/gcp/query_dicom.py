@@ -50,7 +50,7 @@ def add_command(subparsers):
         description=QUERY_DICOM_DESC,
         formatter_class=argparse.RawTextHelpFormatter)
 
-    profile = get_profile()
+    # profile = get_profile()
     # project = profile.get('project')
     # location = profile.get('location')
     # dataset = profile.get('hc_dataset')
@@ -98,25 +98,29 @@ def query_dicom(args):
             result['rows'].append(row)
         return result
 
+    def parse_query_condition(sql):
+        if len(sql) == 0:
+            return
+        else:
+            where = args.sql[1].split('=')
+            return '{}="{}"'.format(where[0], where[1])
+
     credentials = google.oauth2.credentials.Credentials(get_token())
     hc_client = Client(get_token)
     bq_client = bigquery.Client(args.project, credentials)
     store_name = 'projects/{}/locations/{}/datasets/{}/dicomStores/{}'.format(args.project, args.location, args.dataset, args.dicomstore)
     tables = bq_client.list_tables('{}.{}'.format(args.project, args.dataset))
-    table = bq_client.get_table('{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
-    print(args.sql)
-    if args.export or args.dicomstore not in list_table_ids(tables):   # gcp.bq.list_tables(args.project, args.dataset):
+
+    if args.export or args.dicomstore not in list_table_ids(tables):
         print('Exporting Healthcare API dicomstore to BigQuery')
-        hc_client.export_dicom_to_bigquery(store_name, table.self_link) # TODO (permission error or not found at the moment)
-        # gcp.hc.export_to_bigquery(args.project, args.location, args.dataset, args.dicomstore)
+        hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
 
     # TODO enable raw queries (?)
-    query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=' '.join(args.sql) or '1=1')
+    query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=parse_query_condition(args.sql) or '1=1')
     try:
         query_job = bq_client.query(query)  # API request
         query_result = query_job.result()
         result = parse_query_result(query_job, query_result)
-
     except base.GCPError as ex:
         raise CliError(str(ex))
     hierarchy = result_to_hierarchy(result)
