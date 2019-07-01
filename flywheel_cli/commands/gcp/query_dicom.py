@@ -120,7 +120,7 @@ def query_dicom(args):
             datasets.append(dataset.dataset_id)
         if args.new_dataset in datasets:
             print('dataset already exists')
-            return
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.new_dataset, args.new_table or args.dicomstore))
         elif args.new_dataset:
             print('new dataset detected')
             create_bigquery_dataset(args.project, args.new_dataset, bigquery, bq_client)
@@ -143,7 +143,6 @@ def query_dicom(args):
     if args.export or args.dicomstore not in list_table_ids(tables):
         print('Exporting Healthcare API dicomstore to BigQuery')
         export_controller(list(bq_client.list_datasets()), args, bigquery, bq_client)
-        # hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
 
     # TODO enable raw queries (?)
     query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=parse_query_condition(args.sql) or '1=1')
