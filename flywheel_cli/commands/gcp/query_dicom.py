@@ -80,8 +80,6 @@ def add_command(subparsers):
         help='SQL WHERE clause. Kindly provide it as a string')
     group.add_argument('--all', action='store_true',
         help='Return all records from BigQuery table')
-    # parser.add_argument('sql', metavar='SQL WHERE', nargs=argparse.REMAINDER,
-    #     help='SQL WHERE clause')
 
     parser.set_defaults(func=query_dicom)
     parser.set_defaults(parser=parser)
@@ -161,6 +159,8 @@ def query_dicom(args):
         result = parse_query_result(query_job, query_result)
     except base.GCPError as ex:
         raise CliError(str(ex))
+    except Exception as e: print(e)
+
     hierarchy = result_to_hierarchy(result)
     summary = 'Query matched {total_studies} studies, {total_series} series, {total_images} images'.format(**hierarchy)
     print(summary, file=sys.stderr)
