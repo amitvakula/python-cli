@@ -2,6 +2,7 @@ import argparse
 import datetime
 import re
 import sys
+import google.oauth2.credentials
 
 from ...errors import CliError
 from ...sdk_impl import create_flywheel_session
@@ -9,6 +10,8 @@ from ..view import lookup, lookup_view
 from .auth import get_token
 from .flywheel_gcp import GCP, GCPError
 from .profile import get_profile
+from google.cloud import bigquery
+
 
 
 EXPORT_VIEW_DESC = """
@@ -46,6 +49,9 @@ def add_command(subparsers):
         help='Dataset (default: {})'.format('dataset'))
     parser.add_argument('--table', metavar='NAME', default=None,
         help='Table (default: username_YYYYMMDD_HHMMSS)')
+    parser.add_argument('--bq_location', metavar='NAME',
+        help='Export new BigQuery dataset location')
+
 
     parser.set_defaults(func=export_view)
     parser.set_defaults(parser=parser)
@@ -57,6 +63,13 @@ def export_view(args):
         if not getattr(args, param, None):
             raise CliError(param + ' required')
 
+    def create_bigquery_dataset(args, bigquery, bq_client):
+        dataset = bigquery.Dataset('{}.{}'.format(args.project, args.bq_dataset))
+        dataset.location = args.bq_location
+        dataset = bq_client.create_dataset(dataset)
+
+    credentials = google.oauth2.credentials.Credentials(get_token())
+    bq_client = bigquery.Client(args.project, credentials)
     api = create_flywheel_session()
     if args.id:
         view = api.get('/views/' + args.id)
@@ -74,8 +87,9 @@ def export_view(args):
 
     print('Exporting to BigQuery table ' + args.table, file=sys.stderr)
     gcp = GCP(get_token)
-    datasets = gcp.bq.list_datasets(args.project)
+    datasets = bq_client.list_datasets()
+
     if args.dataset not in datasets:
         print('Creating dataset ' + args.dataset, file=sys.stderr)
-        gcp.bq.create_dataset(args.project, args.dataset)
+        create_bigquery_dataset(args.project, args.dataset, bigquery, bq_client)
     gcp.bq.upload_csv(args.project, args.dataset, args.table, csv.encode('utf-8'))

@@ -2,13 +2,13 @@ import argparse
 import itertools
 import sys
 import json
+import google.oauth2.credentials
+
 from healthcare_api.client import Client, base
 from .auth import get_token
-from .flywheel_gcp import GCP, GCPError
 from .profile import get_profile
 from ...errors import CliError
 from google.cloud import bigquery
-import google.oauth2.credentials
 
 
 QUERY_DICOM_DESC = """
@@ -49,7 +49,7 @@ def add_command(subparsers):
         help='Query dicoms in Healthcare API via BigQuery',
         description=QUERY_DICOM_DESC,
         formatter_class=argparse.RawTextHelpFormatter)
-
+    group = parser.add_mutually_exclusive_group()
     # profile = get_profile()
     # project = profile.get('project')
     # location = profile.get('location')
@@ -66,16 +66,22 @@ def add_command(subparsers):
         help='Dicomstore / table (default: {})'.format('dicomstore'))
     parser.add_argument('--export', action='store_true',
         help='Export to BigQuery first (even if table exists)')
-    parser.add_argument('--new_dataset', metavar='NAME',
-        help='Export to new BigQuery dataset destination (requires --export)')
-    parser.add_argument('--new_table', metavar='NAME',
-        help='Export to new BigQuery table (requires --new_dataset)')
-    parser.add_argument('sql', metavar='SQL WHERE', nargs=argparse.REMAINDER,
-        help='SQL WHERE clause')
+    parser.add_argument('--bq_dataset', metavar='NAME',
+        help='Export to new BigQuery dataset (requires --export)')
+    parser.add_argument('--bq_table', metavar='NAME',
+        help='Export to new BigQuery table (requires --bq_dataset)')
+    parser.add_argument('--bq_location', metavar='NAME',
+        help='Export new BigQuery dataset location')
     parser.add_argument('--studies', action='store_true',
         help='Return studies only (hide series)')
     parser.add_argument('--uids', action='store_true',
         help='Return UIDs only (useful for import)')
+    group.add_argument('--sql', metavar='SQL WHERE',
+        help='SQL WHERE clause. Kindly provide it as a string')
+    group.add_argument('--all', action='store_true',
+        help='Return all records from BigQuery table')
+    # parser.add_argument('sql', metavar='SQL WHERE', nargs=argparse.REMAINDER,
+    #     help='SQL WHERE clause')
 
     parser.set_defaults(func=query_dicom)
     parser.set_defaults(parser=parser)
@@ -88,18 +94,13 @@ def query_dicom(args):
             raise CliError(param + ' required')
 
     def list_table_ids(tables):
-        table_ids = []
-        for table in tables:
-            table_ids.append(table.table_id)
-        return table_ids
+        return [table.table_id for table in tables]
 
     def parse_query_result(query_job, query_result):
         result = {
             'query_id': query_job.job_id,
-            'rows': []
+            'rows': [row for row in query_result]
             }
-        for row in query_result:
-            result['rows'].append(row)
         return result
 
     def parse_query_condition(sql):
@@ -109,22 +110,22 @@ def query_dicom(args):
             where = args.sql[1].split('=')
             return '{}="{}"'.format(where[0], where[1])
 
-    def create_bigquery_dataset(project, new_dataset, bigquery, bq_client):
-        dataset = bigquery.Dataset('{}.{}'.format(project, new_dataset))
-        dataset.location = 'US'
+    def create_bigquery_dataset(args, bigquery, bq_client):
+        dataset = bigquery.Dataset('{}.{}'.format(args.project, args.bq_dataset))
+        dataset.location = args.bq_location
         dataset = bq_client.create_dataset(dataset)
 
     def export_controller(dataset_list, args, bigquery, bq_client):
         datasets = []
         for dataset in dataset_list:
             datasets.append(dataset.dataset_id)
-        if args.new_dataset in datasets:
+        if args.bq_dataset in datasets:
             print('dataset already exists')
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.new_dataset, args.new_table or args.dicomstore))
-        elif args.new_dataset:
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.bq_dataset, args.bq_table or args.dicomstore))
+        elif args.bq_dataset:
             print('new dataset detected')
-            create_bigquery_dataset(args.project, args.new_dataset, bigquery, bq_client)
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.new_dataset, args.new_table or args.dicomstore))
+            create_bigquery_dataset(args.project, args.bq_dataset, bigquery, bq_client)
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.bq_dataset, args.bq_table or args.dicomstore))
         elif args.dataset in datasets:
             print('dataset ok, but no table, creating...')
             hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
@@ -133,6 +134,14 @@ def query_dicom(args):
             create_bigquery_dataset(args.project, args.dataset, bigquery, bq_client)
             hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
 
+    def create_where_clause(args):
+        if args.all:
+            return '1=1'
+        elif args.sql:
+            return ''.join(args.sql)
+        else:
+            where = input('Kindly provide your SQL WHERE clause: ')
+            return where
 
     credentials = google.oauth2.credentials.Credentials(get_token())
     hc_client = Client(get_token)
@@ -145,7 +154,7 @@ def query_dicom(args):
         export_controller(list(bq_client.list_datasets()), args, bigquery, bq_client)
 
     # TODO enable raw queries (?)
-    query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=parse_query_condition(args.sql) or '1=1')
+    query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=create_where_clause(args))
     try:
         query_job = bq_client.query(query)  # API request
         query_result = query_job.result()

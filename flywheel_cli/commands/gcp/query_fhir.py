@@ -1,8 +1,9 @@
 import argparse
 import sys
 
+from healthcare_api.client import Client, base
 from .auth import get_token
-from .flywheel_gcp import GCP
+# from .flywheel_gcp import GCP
 from .profile import get_profile
 from ...errors import CliError
 
@@ -50,8 +51,12 @@ def query_fhir(args):
         if not getattr(args, param, None):
             raise CliError(param + ' required')
     query = ''.join(args.query)
-    gcp = GCP(get_token)
-    resp = gcp.hc.list_fhir_resources(args.project, args.location, args.dataset, args.fhirstore, args.type, query)
+    store_name = 'projects/{}/locations/{}/datasets/{}/fhirStores/{}'.format(args.project, args.location, args.dataset, args.fhirstore)
+    hc_client = Client(get_token)
+    resp = hc_client.search_fhir_resources(store_name, args.type)
+    # gcp = GCP(get_token)
+    # resp = gcp.hc.list_fhir_resources(args.project, args.location, args.dataset, args.fhirstore, args.type, query)
+    print(resp)
     refs = []
     for resource in resp['entry']:
         refs.append('{}/{}'.format(resource['resource']['resourceType'], resource['resource']['id']))

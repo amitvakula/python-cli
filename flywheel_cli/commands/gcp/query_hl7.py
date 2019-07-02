@@ -1,8 +1,9 @@
 import argparse
 import sys
 
+from healthcare_api.client import Client, base
 from .auth import get_token
-from .flywheel_gcp import GCP
+# from .flywheel_gcp import GCP
 from .profile import get_profile
 from ...errors import CliError
 
@@ -50,8 +51,13 @@ def query_hl7(args):
         if not getattr(args, param, None):
             raise CliError(param + ' required')
     query = ''.join(args.query)
-    gcp = GCP(get_token)
-    resp = gcp.hc.list_hl7_messages(args.project, args.location, args.dataset, args.hl7store, query)
+    # gcp = GCP(get_token)
+    # resp = gcp.hc.list_hl7_messages(args.project, args.location, args.dataset, args.hl7store, query)
+    # print(args.query)
+    hc_client = Client(get_token)
+    store_name = 'projects/{}/locations/{}/datasets/{}/hl7V2Stores/{}'.format(args.project, args.location, args.dataset, args.hl7store)
+    resp = hc_client.list_hl7v2_messages(store_name)
+    print(resp)
     ids = list(map(lambda x: x.split('/')[-1], resp['messages']))
     summary = 'Query matched {} resources'.format(len(ids))
     print(summary, file=sys.stderr)
