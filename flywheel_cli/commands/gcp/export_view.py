@@ -71,6 +71,7 @@ def export_view(args):
     credentials = google.oauth2.credentials.Credentials(get_token())
     bq_client = bigquery.Client(args.project, credentials)
     api = create_flywheel_session()
+
     if args.id:
         view = api.get('/views/' + args.id)
     else:

@@ -3,7 +3,6 @@ import sys
 
 from healthcare_api.client import Client, base
 from .auth import get_token
-# from .flywheel_gcp import GCP
 from .profile import get_profile
 from ...errors import CliError
 
@@ -37,7 +36,8 @@ def add_command(subparsers):
                         help='Dataset (default: {})'.format('dataset'))
     parser.add_argument('--fhirstore', metavar='NAME',
                         help='FHIR store (default: {})'.format('fhirstore'))
-    parser.add_argument('--type', metavar='TYPE', help='FHIR resource type')
+    parser.add_argument('--type', metavar='TYPE', required=True,
+                        help='FHIR resource type')
     parser.add_argument('query', metavar='QUERY', nargs=argparse.REMAINDER,
                         help='FHIR search query')
 
@@ -50,13 +50,18 @@ def query_fhir(args):
     for param in ['project', 'location', 'dataset', 'fhirstore']:
         if not getattr(args, param, None):
             raise CliError(param + ' required')
-    query = ''.join(args.query)
+
+    def create_query_object(args):
+        query_object = {}
+        for elem in args.query:
+            key_and_value = elem.split('=')
+            query_object[key_and_value[0]] = key_and_value[1]
+        return query_object
+
+    query = create_query_object(args)
     store_name = 'projects/{}/locations/{}/datasets/{}/fhirStores/{}'.format(args.project, args.location, args.dataset, args.fhirstore)
     hc_client = Client(get_token)
-    resp = hc_client.search_fhir_resources(store_name, args.type)
-    # gcp = GCP(get_token)
-    # resp = gcp.hc.list_fhir_resources(args.project, args.location, args.dataset, args.fhirstore, args.type, query)
-    print(resp)
+    resp = hc_client.search_fhir_resources(store_name, args.type, **query)
     refs = []
     for resource in resp['entry']:
         refs.append('{}/{}'.format(resource['resource']['resourceType'], resource['resource']['id']))

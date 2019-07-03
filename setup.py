@@ -28,6 +28,9 @@ INSTALL_REQUIRES = [
     'pyinstaller~=3.3.1',
     'tzlocal~=1.5.1',
     'urllib3>=1.25.2',
+    'google-cloud-bigquery',
+    'google-api-python-client',
+
 ]
 
 DEV_REQUIRES = [
