@@ -39,7 +39,7 @@ def add_command(subparsers):
     parser.add_argument('--hl7store', metavar='NAME',
                         help='HL7 store (default: {})'.format('hl7store'))
     parser.add_argument('query', metavar='QUERY', nargs=argparse.REMAINDER,
-                        help='HL7 filter query')
+                        help='HL7 filter query, kindly provide it in quotes ('')')
 
     parser.set_defaults(func=query_hl7)
     parser.set_defaults(parser=parser)
@@ -50,15 +50,9 @@ def query_hl7(args):
     for param in ['project', 'location', 'dataset', 'hl7store']:
         if not getattr(args, param, None):
             raise CliError(param + ' required')
-    query = ''.join(args.query)
-    # gcp = GCP(get_token)
-    # resp = gcp.hc.list_hl7_messages(args.project, args.location, args.dataset, args.hl7store, query)
-    # print(args.query)
     hc_client = Client(get_token)
     store_name = 'projects/{}/locations/{}/datasets/{}/hl7V2Stores/{}'.format(args.project, args.location, args.dataset, args.hl7store)
-    resp = hc_client.list_hl7v2_messages(store_name, filter=query)
-    print(resp)
-    print(query)
+    resp = hc_client.list_hl7v2_messages(store_name, filter_=args.query)
     ids = list(map(lambda x: x.split('/')[-1], resp['messages']))
     summary = 'Query matched {} resources'.format(len(ids))
     print(summary, file=sys.stderr)
