@@ -159,13 +159,24 @@ def profile_create(args):
                     }
                 }
 
+    def check_3rdparty_connected_account():
+        try:
+            token = api.get('/users/self/tokens')
+            if token:
+                return token[0]['_id']
+        except CliError:
+            return None
+
+    api = create_flywheel_session()
+    token = check_3rdparty_connected_account()
+    if not token:
+        raise CliError('Please add your account to "Connected 3rd-party accounts"!')
+
     if not [elem for elem in args.properties if elem.startswith('hc_dicomstore')]:
         raise CliError('hc_dicomstore required')
         sys.exit(1)
 
     existing_profiles = get_profiles()
-    api = create_flywheel_session()
-    token = api.get('/users/self/tokens')[0]['_id']
     additional_profile = args_to_profile(args)
     base_path = 'projects/{}/locations/{}/datasets/{}/'.format(additional_profile['project'], additional_profile['location'], additional_profile['hc_dataset'])
 

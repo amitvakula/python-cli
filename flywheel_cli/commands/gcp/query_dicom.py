@@ -51,10 +51,12 @@ def add_command(subparsers):
         formatter_class=argparse.RawTextHelpFormatter)
     group = parser.add_mutually_exclusive_group()
 
-    profile = get_profile()
-    print(profile)
-    base_path_elements = profile['dicomStore'].split('/')[1::2]
-    print(base_path_elements)
+    # profile = get_profile()
+    # if not profile:
+    #     raise CliError('Please create your GCP profile first!')
+    # print(profile)
+    # base_path_elements = profile['dicomStore'].split('/')[1::2]
+    # print(base_path_elements)
     # project = profile.get('project')
     # location = profile.get('location')
     # dataset = profile.get('hc_dataset')
