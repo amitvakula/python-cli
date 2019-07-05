@@ -50,19 +50,23 @@ def add_command(subparsers):
         description=QUERY_DICOM_DESC,
         formatter_class=argparse.RawTextHelpFormatter)
     group = parser.add_mutually_exclusive_group()
-    # profile = get_profile()
+
+    profile = get_profile()
+    print(profile)
+    base_path_elements = profile['dicomStore'].split('/')[1::2]
+    print(base_path_elements)
     # project = profile.get('project')
     # location = profile.get('location')
     # dataset = profile.get('hc_dataset')
     # dicomstore = profile.get('hc_dicomstore')
 
-    parser.add_argument('--project', metavar='NAME',
+    parser.add_argument('--project', metavar='NAME', default='project',
         help='GCP project (default: {})'.format('project'))
-    parser.add_argument('--location', metavar='NAME',
+    parser.add_argument('--location', metavar='NAME', default='location',
         help='Location (default: {})'.format('location'))
-    parser.add_argument('--dataset', metavar='NAME',
+    parser.add_argument('--dataset', metavar='NAME', default='dataset',
         help='Dataset (default: {})'.format('dataset'))
-    parser.add_argument('--dicomstore', metavar='NAME',
+    parser.add_argument('--dicomstore', metavar='NAME', default='dicomstore',
         help='Dicomstore / table (default: {})'.format('dicomstore'))
     parser.add_argument('--export', action='store_true',
         help='Export to BigQuery first (even if table exists)')
@@ -144,7 +148,11 @@ def query_dicom(args):
     credentials = google.oauth2.credentials.Credentials(get_token())
     hc_client = Client(get_token)
     bq_client = bigquery.Client(args.project, credentials)
-    store_name = 'projects/{}/locations/{}/datasets/{}/dicomStores/{}'.format(args.project, args.location, args.dataset, args.dicomstore)
+    profile = get_profile()
+
+    store_name = profile['dicomStore']
+    # print(store_name)
+    # store_name = 'projects/{}/locations/{}/datasets/{}/dicomStores/{}'.format(args.project, args.location, args.dataset, args.dicomstore)
     tables = bq_client.list_tables('{}.{}'.format(args.project, args.dataset))
 
     if args.export or args.dicomstore not in list_table_ids(tables):
@@ -159,7 +167,7 @@ def query_dicom(args):
         result = parse_query_result(query_job, query_result)
     except base.GCPError as ex:
         raise CliError(str(ex))
-    except Exception as e: print(e)
+    except Exception as e: raise
 
     hierarchy = result_to_hierarchy(result)
     summary = 'Query matched {total_studies} studies, {total_series} series, {total_images} images'.format(**hierarchy)

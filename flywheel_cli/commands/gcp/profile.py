@@ -8,7 +8,6 @@ from ...errors import CliError
 from ...sdk_impl import create_flywheel_session
 from ...util import set_subparser_print_help
 
-
 PROPERTIES = collections.OrderedDict({
     'project': 'Google Cloud Platform project',
     'location': 'API location/region (Healthcare, AutoML, etc.)',
@@ -17,6 +16,15 @@ PROPERTIES = collections.OrderedDict({
     'hc_fhirstore': 'Healthcare API FHIR-store',
     'hc_hl7store': 'Healthcare API HL7-store',
 })
+
+
+PROFILE_PROPERTIES = collections.OrderedDict({
+    'auth_token': 'GCP auth token',
+    'dicomStore': 'Healthcare API dicom-store',
+    'fhirStore': 'Healthcare API FHIR-store',
+    'hl7Store': 'Healthcare API HL7-store',
+})
+
 
 PARSER_DESC = """
 Create, update and delete GCP user profiles used throughout `fw gcp` commands.
@@ -77,18 +85,36 @@ def add_command(subparsers):
     return parser
 
 
+def create_store_specific_path_part(profile_data):
+    stores = {
+        'dicomStore': 'dicomStores/{}'.format(profile_data.get('hc_dicomstore')),
+        'fhirStore': 'fhirStores/{}'.format(profile_data.get('hc_fhirstore')),
+        'hl7V2Store': 'hl7V2Stores/{}'.format(profile_data.get('hc_hl7store'))
+        }
+    return stores
+
+
+def create_store_path(key, profile, base_path):
+    if create_store_specific_path_part(profile)[key].split('/')[1] == 'None':
+        return None
+    else:
+        return base_path + create_store_specific_path_part(profile)[key]
+
+
 def get_profiles():
     api = create_flywheel_session()
     try:
-        return api.get('/users/self/info').get('gcp_profiles', [])
+        return api.get('/users/self/info')
     except CliError:
-        return []
+        return {}
 
 
 def get_profile():
     profiles = get_profiles()
     if profiles:
-        return profiles[0]
+        for profile, value in profiles['ghc_import']['profiles'].items():
+            if profile == profiles['ghc_import']['selected_profile']:
+                return value
     else:
         return {}
 
@@ -110,36 +136,82 @@ def args_to_profile(args):
 def profile_list(args):
     profiles = get_profiles()
     if profiles:
+        active_profile = profiles['ghc_import']['selected_profile']
+        profiles = [v for k, v in profiles['ghc_import']['profiles'].items()]
         for index, profile in enumerate(profiles):
-            print('' + profile['name'] + (' (active)' if index == 0 else '') + ':')
-            for key in PROPERTIES:
+            print('Profile: {}'.format(profile['name']) + (' (active)' if profile['name'] == active_profile else ''))
+            for key in PROFILE_PROPERTIES:
                 print('  {} = {}'.format(key, profile.get(key, '')))
     else:
         print('No GCP user profiles found.')
 
 
 def profile_create(args):
-    profiles = get_profiles()
-    if any(p['name'] == args.name for p in profiles):
-        raise CliError('GCP profile already exists: ' + args.name)
-    profiles = [args_to_profile(args)] + profiles
+
+    def create_profile(additional_profile, base_path):
+        return {
+                    additional_profile['name']: {
+                        "auth_token": token,
+                        "name": additional_profile['name'],
+                        "fhirStore": create_store_path("fhirStore", additional_profile, base_path),
+                        "hl7Store": create_store_path("hl7V2Store", additional_profile, base_path),
+                        "dicomStore": create_store_path("dicomStore", additional_profile, base_path)
+                    }
+                }
+
+    if not [elem for elem in args.properties if elem.startswith('hc_dicomstore')]:
+        raise CliError('hc_dicomstore required')
+        sys.exit(1)
+
+    existing_profiles = get_profiles()
     api = create_flywheel_session()
-    api.post('/users/self/info', json={'set': {'gcp_profiles': profiles}})
-    print('Successfully created GCP profile ' + args.name)
+    token = api.get('/users/self/tokens')[0]['_id']
+    additional_profile = args_to_profile(args)
+    base_path = 'projects/{}/locations/{}/datasets/{}/'.format(additional_profile['project'], additional_profile['location'], additional_profile['hc_dataset'])
+
+    if not existing_profiles:
+        brand_new_profile = {
+                    "selected_profile": additional_profile['name'],
+                    "profiles": create_profile(additional_profile, base_path)
+                    }
+        api.post('/users/self/info', json={'set': {'ghc_import': brand_new_profile}})
+        print('Successfully created GCP profile ' + args.name)
+    elif args.name in existing_profiles['ghc_import']['profiles']:
+        raise CliError('GCP profile already exists: ' + args.name)
+    else:
+        existing_profiles['ghc_import']['profiles'].update(create_profile(additional_profile, base_path))
+        existing_profiles['ghc_import']['selected_profile'] = additional_profile['name']
+        api.post('/users/self/info', json={'set': existing_profiles})
+        print('Successfully added GCP profile ' + args.name)
 
 
 def profile_update(args):
+
+    def update_profile(profile, profile_update_data, base_path):
+        return {
+                "fhirStore": create_store_path("fhirStore", profile_update_data, base_path) or profile['fhirStore'],
+                "hl7Store": create_store_path("hl7V2Store", profile_update_data, base_path) or profile['hl7Store'],
+                "dicomStore": create_store_path("dicomStore", profile_update_data, base_path) or profile['dicomStore']
+
+                }
+
     profiles = get_profiles()
-    for profile in profiles:
+    profiles_list = [v for k, v in profiles['ghc_import']['profiles'].items()]
+
+    for profile in profiles_list:
         if profile['name'] == args.name:
             break
     else:
         raise CliError('GCP profile not found: ' + args.name)
-    profile.update(args_to_profile(args))
-    profiles = [profile] + [p for p in profiles if p['name'] != args.name]
+    base_path_elements = profile['dicomStore'].split('/')[1::2]
+    base_path = 'projects/{}/locations/{}/datasets/{}/'.format(base_path_elements[0], base_path_elements[1], base_path_elements[2])
+    profile_update_data = args_to_profile(args)
+    updated_profile = update_profile(profile, profile_update_data, base_path)
+
+    profile.update(updated_profile)
     api = create_flywheel_session()
-    api.post('/users/self/info', json={'set': {'gcp_profiles': profiles}})
-    print('Successfully created GCP profile ' + args.name)
+    api.post('/users/self/info', json={'set': profiles})
+    print('Successfully updated GCP profile ' + args.name)
 
 
 def profile_delete(args):
