@@ -51,25 +51,15 @@ def add_command(subparsers):
         formatter_class=argparse.RawTextHelpFormatter)
     group = parser.add_mutually_exclusive_group()
 
-    # profile = get_profile()
-    # if not profile:
-    #     raise CliError('Please create your GCP profile first!')
-    # print(profile)
-    # base_path_elements = profile['dicomStore'].split('/')[1::2]
-    # print(base_path_elements)
-    # project = profile.get('project')
-    # location = profile.get('location')
-    # dataset = profile.get('hc_dataset')
-    # dicomstore = profile.get('hc_dicomstore')
 
-    parser.add_argument('--project', metavar='NAME', default='project',
-        help='GCP project (default: {})'.format('project'))
-    parser.add_argument('--location', metavar='NAME', default='location',
-        help='Location (default: {})'.format('location'))
-    parser.add_argument('--dataset', metavar='NAME', default='dataset',
-        help='Dataset (default: {})'.format('dataset'))
-    parser.add_argument('--dicomstore', metavar='NAME', default='dicomstore',
-        help='Dicomstore / table (default: {})'.format('dicomstore'))
+    parser.add_argument('--project', metavar='NAME',
+        help='GCP project (defaults to your GCP profile project)')
+    parser.add_argument('--location', metavar='NAME',
+        help='Location (defaults to your GCP profile location)')
+    parser.add_argument('--dataset', metavar='NAME',
+        help='Dataset (defaults to your GCP profile dataset)')
+    parser.add_argument('--dicomstore', metavar='NAME',
+        help='Dicomstore / table (defaults to your GCP profile dicomstore)')
     parser.add_argument('--export', action='store_true',
         help='Export to BigQuery first (even if table exists)')
     parser.add_argument('--bq_dataset', metavar='NAME',
@@ -93,9 +83,30 @@ def add_command(subparsers):
 
 
 def query_dicom(args):
-    for param in ['project', 'location', 'dataset', 'dicomstore']:
-        if not getattr(args, param, None):
-            raise CliError(param + ' required')
+
+    def create_query_object(profile=None, args=None):
+        if profile:
+            profile_elements = profile['dicomStore'].split('/')[1::2]
+            return {
+                'project': profile_elements[0],
+                'location': profile_elements[1],
+                'dataset': profile_elements[2],
+                'dicomstore': profile_elements[3]
+            }
+        else:
+            for param in ['project', 'location', 'dataset', 'dicomstore']:
+                if not getattr(args, param, None):
+                    raise CliError(param + ' required')
+            return {
+                'project': args.project,
+                'location': args.location,
+                'dataset': args.dataset,
+                'dicomstore': args.dicomstore
+            }
+
+    profile = get_profile()
+    print(profile)
+    query_object = create_query_object(profile, args)
 
     def list_table_ids(tables):
         return [table.table_id for table in tables]
@@ -115,7 +126,7 @@ def query_dicom(args):
             return '{}="{}"'.format(where[0], where[1])
 
     def create_bigquery_dataset(args, bigquery, bq_client):
-        dataset = bigquery.Dataset('{}.{}'.format(args.project, args.bq_dataset))
+        dataset = bigquery.Dataset('{}.{}'.format(query_object['project'], args.bq_dataset))
         dataset.location = args.bq_location
         dataset = bq_client.create_dataset(dataset)
 
@@ -125,18 +136,18 @@ def query_dicom(args):
             datasets.append(dataset.dataset_id)
         if args.bq_dataset in datasets:
             print('dataset already exists')
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.bq_dataset, args.bq_table or args.dicomstore))
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(query_object['project'], args.bq_dataset, args.bq_table or query_object['dicomstore']))
         elif args.bq_dataset:
             print('new dataset detected')
-            create_bigquery_dataset(args.project, args.bq_dataset, bigquery, bq_client)
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.bq_dataset, args.bq_table or args.dicomstore))
-        elif args.dataset in datasets:
+            create_bigquery_dataset(query_object['project'], args.bq_dataset, bigquery, bq_client)
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(query_object['project'], args.bq_dataset, args.bq_table or query_object['dicomstore']))
+        elif query_object['dataset'] in datasets:
             print('dataset ok, but no table, creating...')
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(query_object['project'], query_object['dataset'], query_object['dicomstore']))
         else:
             print('dataset not in bq yet, creating...')
-            create_bigquery_dataset(args.project, args.dataset, bigquery, bq_client)
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(args.project, args.dataset, args.dicomstore))
+            create_bigquery_dataset(query_object['project'], query_object['dataset'], bigquery, bq_client)
+            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(query_object['project'], query_object['dataset'], query_object['dicomstore']))
 
     def create_where_clause(args):
         if args.all:
@@ -149,20 +160,18 @@ def query_dicom(args):
 
     credentials = google.oauth2.credentials.Credentials(get_token())
     hc_client = Client(get_token)
-    bq_client = bigquery.Client(args.project, credentials)
+    bq_client = bigquery.Client(query_object['project'], credentials)
     profile = get_profile()
 
     store_name = profile['dicomStore']
-    # print(store_name)
-    # store_name = 'projects/{}/locations/{}/datasets/{}/dicomStores/{}'.format(args.project, args.location, args.dataset, args.dicomstore)
-    tables = bq_client.list_tables('{}.{}'.format(args.project, args.dataset))
+    tables = bq_client.list_tables('{}.{}'.format(query_object['project'], query_object['dataset']))
 
-    if args.export or args.dicomstore not in list_table_ids(tables):
+    if args.export or query_object['dicomstore'] not in list_table_ids(tables):
         print('Exporting Healthcare API dicomstore to BigQuery')
         export_controller(list(bq_client.list_datasets()), args, bigquery, bq_client)
 
     # TODO enable raw queries (?)
-    query = SQL_TEMPLATE.format(dataset=args.dataset, table=args.dicomstore, where=create_where_clause(args))
+    query = SQL_TEMPLATE.format(dataset=query_object['dataset'], table=query_object['dicomstore'], where=create_where_clause(args))
     try:
         query_job = bq_client.query(query)  # API request
         query_result = query_job.result()
