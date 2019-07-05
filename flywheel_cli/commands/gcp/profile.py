@@ -226,4 +226,21 @@ def profile_update(args):
 
 
 def profile_delete(args):
-    raise CliError('Not implemented')
+    profiles = get_profiles()
+    profiles_list = [v for k, v in profiles['ghc_import']['profiles'].items()]
+
+    for profile in profiles_list:
+        if profile['name'] == args.name:
+            break
+    else:
+        raise CliError('GCP profile not found: ' + args.name)
+
+    def remove_profile(profiles, profile):
+        reduced_profiles = profiles['ghc_import']['profiles']
+        del reduced_profiles[profile['name']]
+        return reduced_profiles
+
+    reduced = remove_profile(profiles, profile)
+    api = create_flywheel_session()
+    api.post('/users/self/info', json={'set': profiles})
+    print('Profile successfully deleted')
