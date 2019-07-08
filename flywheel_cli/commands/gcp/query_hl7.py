@@ -24,20 +24,14 @@ def add_command(subparsers):
                                    description=QUERY_HL7_DESC,
                                    formatter_class=argparse.RawTextHelpFormatter)
 
-    # profile = get_profile()
-    # project = profile.get('project')
-    # location = profile.get('location')
-    # dataset = profile.get('hc_dataset')
-    # hl7store = profile.get('hc_hl7store')
-
-    parser.add_argument('--project', metavar='NAME', default='project',
-                        help='GCP project (default: {})'.format('project'))
-    parser.add_argument('--location', metavar='NAME', default='location',
-                        help='Location (default: {})'.format('location'))
-    parser.add_argument('--dataset', metavar='NAME', default='dataset',
-                        help='Dataset (default: {})'.format('dataset'))
-    parser.add_argument('--hl7store', metavar='NAME', default='hl7store',
-                        help='HL7 store (default: {})'.format('hl7store'))
+    parser.add_argument('--project', metavar='NAME',
+                        help='GCP project (defaults to your GCP profile project)')
+    parser.add_argument('--location', metavar='NAME',
+                        help='Location (defaults to your GCP profile location)')
+    parser.add_argument('--dataset', metavar='NAME',
+                        help='Dataset (defaults to your GCP profile dataset)')
+    parser.add_argument('--hl7store', metavar='NAME',
+                        help='FHIR store (defaults to your GCP profile hl7store)')
     parser.add_argument('query', metavar='QUERY', nargs=argparse.REMAINDER,
                         help='HL7 filter query, kindly provide it in quotes ('')')
 
@@ -47,11 +41,35 @@ def add_command(subparsers):
 
 
 def query_hl7(args):
-    for param in ['project', 'location', 'dataset', 'hl7store']:
-        if not getattr(args, param, None):
-            raise CliError(param + ' required')
+
+    def create_query_object(profile=None, args=None):
+        if profile:
+            if profile['hl7Store']:
+                profile_elements = profile['hl7Store'].split('/')[1::2]
+                return {
+                    'project': profile_elements[0],
+                    'location': profile_elements[1],
+                    'dataset': profile_elements[2],
+                    'hl7store': profile_elements[3]
+                }
+            else:
+                print("Kindly provide hl7store in your profile!")
+                sys.exit(1)
+        else:
+            for param in ['project', 'location', 'dataset', 'hl7store']:
+                if not getattr(args, param, None):
+                    raise CliError(param + ' required')
+            return {
+                'project': args.project,
+                'location': args.location,
+                'dataset': args.dataset,
+                'hl7store': args.hl7store
+            }
+
+    profile = get_profile()
+    query_object = create_query_object(profile, args)
     hc_client = Client(get_token)
-    store_name = 'projects/{}/locations/{}/datasets/{}/hl7V2Stores/{}'.format(args.project, args.location, args.dataset, args.hl7store)
+    store_name = 'projects/{}/locations/{}/datasets/{}/hl7V2Stores/{}'.format(query_object['project'], query_object['location'], query_object['dataset'], query_object['hl7store'])
     resp = hc_client.list_hl7v2_messages(store_name, filter_=args.query)
     ids = list(map(lambda x: x.split('/')[-1], resp['messages']))
     summary = 'Query matched {} resources'.format(len(ids))

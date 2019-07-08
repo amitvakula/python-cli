@@ -22,20 +22,14 @@ def add_command(subparsers):
                                    description=QUERY_FHIR_DESC,
                                    formatter_class=argparse.RawTextHelpFormatter)
 
-    # profile = get_profile()
-    # project = profile.get('project')
-    # location = profile.get('location')
-    # dataset = profile.get('hc_dataset')
-    # fhirstore = profile.get('hc_fhirstore')
-
-    parser.add_argument('--project', metavar='NAME', default='project',
-                        help='GCP project (default: {})'.format('project'))
-    parser.add_argument('--location', metavar='NAME', default='location',
-                        help='Location (default: {})'.format('location'))
-    parser.add_argument('--dataset', metavar='NAME', default='dataset',
-                        help='Dataset (default: {})'.format('dataset'))
-    parser.add_argument('--fhirstore', metavar='NAME', default='fhirstore',
-                        help='FHIR store (default: {})'.format('fhirstore'))
+    parser.add_argument('--project', metavar='NAME',
+                        help='GCP project (defaults to your GCP profile project)')
+    parser.add_argument('--location', metavar='NAME',
+                        help='Location (defaults to your GCP profile location)')
+    parser.add_argument('--dataset', metavar='NAME',
+                        help='Dataset (defaults to your GCP profile dataset)')
+    parser.add_argument('--fhirstore', metavar='NAME',
+                        help='FHIR store (defaults to your GCP profile fhirstore)')
     parser.add_argument('--type', metavar='TYPE', required=True,
                         help='FHIR resource type')
     parser.add_argument('query', metavar='QUERY', nargs=argparse.REMAINDER,
@@ -47,9 +41,30 @@ def add_command(subparsers):
 
 
 def query_fhir(args):
-    for param in ['project', 'location', 'dataset', 'fhirstore']:
-        if not getattr(args, param, None):
-            raise CliError(param + ' required')
+
+    def create_profile_object(profile=None, args=None):
+        if profile:
+            if profile['fhirStore']:
+                profile_elements = profile['fhirStore'].split('/')[1::2]
+                return {
+                    'project': profile_elements[0],
+                    'location': profile_elements[1],
+                    'dataset': profile_elements[2],
+                    'fhirstore': profile_elements[3]
+                }
+            else:
+                print("Kindly provide fhirStore in your profile!")
+                sys.exit(1)
+        else:
+            for param in ['project', 'location', 'dataset', 'fhirstore']:
+                if not getattr(args, param, None):
+                    raise CliError(param + ' required')
+            return {
+                'project': args.project,
+                'location': args.location,
+                'dataset': args.dataset,
+                'fhirstore': args.fhirstore
+            }
 
     def create_query_object(args):
         query_object = {}
@@ -58,8 +73,10 @@ def query_fhir(args):
             query_object[key_and_value[0]] = key_and_value[1]
         return query_object
 
+    profile = get_profile()
+    query_object = create_profile_object(profile, args)
     query = create_query_object(args)
-    store_name = 'projects/{}/locations/{}/datasets/{}/fhirStores/{}'.format(args.project, args.location, args.dataset, args.fhirstore)
+    store_name = 'projects/{}/locations/{}/datasets/{}/fhirStores/{}'.format(query_object['project'], query_object['location'], query_object['dataset'], query_object['fhirstore'])
     hc_client = Client(get_token)
     resp = hc_client.search_fhir_resources(store_name, args.type, **query)
     refs = []
