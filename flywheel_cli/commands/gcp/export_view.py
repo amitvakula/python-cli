@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import io
 import re
 import sys
 import google.oauth2.credentials
@@ -8,7 +9,6 @@ from ...errors import CliError
 from ...sdk_impl import create_flywheel_session
 from ..view import lookup, lookup_view
 from .auth import get_token
-from .flywheel_gcp import GCP, GCPError
 from .profile import get_profile
 from google.cloud import bigquery
 
@@ -64,7 +64,7 @@ def export_view(args):
             raise CliError(param + ' required')
 
     def create_bigquery_dataset(args, bigquery, bq_client):
-        dataset = bigquery.Dataset('{}.{}'.format(args.project, args.bq_dataset))
+        dataset = bigquery.Dataset('{}.{}'.format(args.project, args.dataset))
         dataset.location = args.bq_location
         dataset = bq_client.create_dataset(dataset)
 
@@ -85,12 +85,21 @@ def export_view(args):
         user = api.get('/users/self')
         name = re.sub(r'\W', '', args.label or user['firstname'] + user['lastname'])
         args.table = datetime.datetime.now().strftime(name + '_%Y%m%d_%H%M%S')
-
     print('Exporting to BigQuery table ' + args.table, file=sys.stderr)
-    gcp = GCP(get_token)
-    datasets = bq_client.list_datasets()
 
+    datasets = bq_client.list_datasets()
     if args.dataset not in datasets:
         print('Creating dataset ' + args.dataset, file=sys.stderr)
-        create_bigquery_dataset(args.project, args.dataset, bigquery, bq_client)
-    gcp.bq.upload_csv(args.project, args.dataset, args.table, csv.encode('utf-8'))
+        create_bigquery_dataset(args, bigquery, bq_client)
+
+    dataset_ref = bq_client.dataset(args.dataset)
+    table_ref = dataset_ref.table(args.table)
+    job_config = bigquery.LoadJobConfig()
+    job_config.source_format = bigquery.SourceFormat.CSV
+    job_config.skip_leading_rows = 1
+    job_config.autodetect = True
+
+    f = io.StringIO(csv)
+    job = bq_client.load_table_from_file(f, table_ref, job_config=job_config)
+    job.result()
+    print("Loaded {} rows into {}:{}.".format(job.output_rows, args.dataset, args.table))
