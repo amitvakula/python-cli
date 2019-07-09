@@ -6,7 +6,7 @@ import google.oauth2.credentials
 
 from healthcare_api.client import Client, base
 from .auth import get_token
-from .profile import get_profile
+from .profile import get_profile, create_profile_object
 from ...errors import CliError
 from google.cloud import bigquery
 
@@ -83,26 +83,6 @@ def add_command(subparsers):
 
 def query_dicom(args):
 
-    def create_query_object(profile=None, args=None):
-        if profile:
-            profile_elements = profile['dicomStore'].split('/')[1::2]
-            return {
-                'project': profile_elements[0],
-                'location': profile_elements[1],
-                'dataset': profile_elements[2],
-                'dicomstore': profile_elements[3]
-            }
-        else:
-            for param in ['project', 'location', 'dataset', 'dicomstore']:
-                if not getattr(args, param, None):
-                    raise CliError(param + ' required')
-            return {
-                'project': args.project,
-                'location': args.location,
-                'dataset': args.dataset,
-                'dicomstore': args.dicomstore
-            }
-
     def list_table_ids(tables):
         return [table.table_id for table in tables]
 
@@ -154,12 +134,12 @@ def query_dicom(args):
             return where
 
     profile = get_profile()
-    query_object = create_query_object(profile, args)
+    query_object = create_profile_object('dicomStore', profile, args)
     credentials = google.oauth2.credentials.Credentials(get_token())
     hc_client = Client(get_token)
     bq_client = bigquery.Client(query_object['project'], credentials)
 
-    store_name = profile['dicomStore']
+    store_name = 'projects/{}/locations/{}/datasets/{}/dicomStore/{}'.format(query_object['project'], query_object['location'], query_object['dataset'], query_object['dicomstore'])
     tables = bq_client.list_tables('{}.{}'.format(query_object['project'], query_object['dataset']))
 
     if args.export or query_object['dicomstore'] not in list_table_ids(tables):

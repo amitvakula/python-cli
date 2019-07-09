@@ -133,6 +133,31 @@ def args_to_profile(args):
     return profile
 
 
+def create_profile_object(store, profile=None, args=None):
+    if profile:
+        if profile[store]:
+            profile_elements = profile[store].split('/')[1::2]
+            return {
+                'project': profile_elements[0],
+                'location': profile_elements[1],
+                'dataset': profile_elements[2],
+                store.lower(): profile_elements[3]
+            }
+        else:
+            print("Kindly provide {} in your profile!".format(store.lower()))
+            sys.exit(1)
+    else:
+        for param in ['project', 'location', 'dataset', store.lower()]:
+            if not getattr(args, param, None):
+                raise CliError(param + ' required')
+        return {
+            'project': args.project,
+            'location': args.location,
+            'dataset': args.dataset,
+            store.lower(): vars(args)[store.lower()]
+        }
+
+
 def profile_list(args):
     profiles = get_profiles()
     if profiles:

@@ -4,7 +4,7 @@ import sys
 from healthcare_api.client import Client, base
 from .auth import get_token
 # from .flywheel_gcp import GCP
-from .profile import get_profile
+from .profile import get_profile, create_profile_object
 from ...errors import CliError
 
 QUERY_HL7_DESC = """
@@ -41,33 +41,8 @@ def add_command(subparsers):
 
 
 def query_hl7(args):
-
-    def create_query_object(profile=None, args=None):
-        if profile:
-            if profile['hl7Store']:
-                profile_elements = profile['hl7Store'].split('/')[1::2]
-                return {
-                    'project': profile_elements[0],
-                    'location': profile_elements[1],
-                    'dataset': profile_elements[2],
-                    'hl7store': profile_elements[3]
-                }
-            else:
-                print("Kindly provide hl7store in your profile!")
-                sys.exit(1)
-        else:
-            for param in ['project', 'location', 'dataset', 'hl7store']:
-                if not getattr(args, param, None):
-                    raise CliError(param + ' required')
-            return {
-                'project': args.project,
-                'location': args.location,
-                'dataset': args.dataset,
-                'hl7store': args.hl7store
-            }
-
     profile = get_profile()
-    query_object = create_query_object(profile, args)
+    query_object = create_profile_object('hl7Store', profile, args)
     hc_client = Client(get_token)
     store_name = 'projects/{}/locations/{}/datasets/{}/hl7V2Stores/{}'.format(query_object['project'], query_object['location'], query_object['dataset'], query_object['hl7store'])
     resp = hc_client.list_hl7v2_messages(store_name, filter_=args.query)

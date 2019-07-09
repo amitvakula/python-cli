@@ -3,7 +3,7 @@ import sys
 
 from healthcare_api.client import Client, base
 from .auth import get_token
-from .profile import get_profile
+from .profile import get_profile, create_profile_object
 from ...errors import CliError
 
 QUERY_FHIR_DESC = """
@@ -42,30 +42,6 @@ def add_command(subparsers):
 
 def query_fhir(args):
 
-    def create_profile_object(profile=None, args=None):
-        if profile:
-            if profile['fhirStore']:
-                profile_elements = profile['fhirStore'].split('/')[1::2]
-                return {
-                    'project': profile_elements[0],
-                    'location': profile_elements[1],
-                    'dataset': profile_elements[2],
-                    'fhirstore': profile_elements[3]
-                }
-            else:
-                print("Kindly provide fhirStore in your profile!")
-                sys.exit(1)
-        else:
-            for param in ['project', 'location', 'dataset', 'fhirstore']:
-                if not getattr(args, param, None):
-                    raise CliError(param + ' required')
-            return {
-                'project': args.project,
-                'location': args.location,
-                'dataset': args.dataset,
-                'fhirstore': args.fhirstore
-            }
-
     def create_query_object(args):
         query_object = {}
         for elem in args.query:
@@ -74,7 +50,7 @@ def query_fhir(args):
         return query_object
 
     profile = get_profile()
-    query_object = create_profile_object(profile, args)
+    query_object = create_profile_object('fhirStore', profile, args)
     query = create_query_object(args)
     store_name = 'projects/{}/locations/{}/datasets/{}/fhirStores/{}'.format(query_object['project'], query_object['location'], query_object['dataset'], query_object['fhirstore'])
     hc_client = Client(get_token)
