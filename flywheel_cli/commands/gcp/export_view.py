@@ -9,7 +9,7 @@ from ...errors import CliError
 from ...sdk_impl import create_flywheel_session
 from ..view import lookup, lookup_view
 from .auth import get_token
-from .profile import get_profile
+from .profile import get_profile, create_profile_object
 from google.cloud import bigquery
 
 
@@ -39,15 +39,13 @@ def add_command(subparsers):
     parser.add_argument('container', metavar='CONTAINER',
         help='Container path to run data-view on (group/proj/subj/sess/acq)')
 
-    # profile = get_profile()
-    # project = profile.get('project')
     dataset = 'flywheel_views'
 
     parser.add_argument('--project', metavar='NAME',
         help='GCP project (default: {})'.format('project'))
     parser.add_argument('--dataset', metavar='NAME',
         help='Dataset (default: {})'.format('dataset'))
-    parser.add_argument('--table', metavar='NAME', default=None,
+    parser.add_argument('--table', metavar='NAME',
         help='Table (default: username_YYYYMMDD_HHMMSS)')
     parser.add_argument('--bq_location', metavar='NAME',
         help='Export new BigQuery dataset location')
@@ -59,17 +57,18 @@ def add_command(subparsers):
 
 
 def export_view(args):
-    for param in ['project']:
-        if not getattr(args, param, None):
-            raise CliError(param + ' required')
+    args.location = 'n/a'
+    args.dicomstore = 'n/a'
+    profile = get_profile()
+    profile_object = create_profile_object('dicomStore', profile, args)
 
-    def create_bigquery_dataset(args, bigquery, bq_client):
-        dataset = bigquery.Dataset('{}.{}'.format(args.project, args.dataset))
+    def create_bigquery_dataset(profile, bigquery, bq_client):
+        dataset = bigquery.Dataset('{}.{}'.format(profile['project'], profile['dataset']))
         dataset.location = args.bq_location
         dataset = bq_client.create_dataset(dataset)
 
     credentials = google.oauth2.credentials.Credentials(get_token())
-    bq_client = bigquery.Client(args.project, credentials)
+    bq_client = bigquery.Client(profile_object['project'], credentials)
     api = create_flywheel_session()
 
     if args.id:
@@ -87,19 +86,19 @@ def export_view(args):
         args.table = datetime.datetime.now().strftime(name + '_%Y%m%d_%H%M%S')
     print('Exporting to BigQuery table ' + args.table, file=sys.stderr)
 
-    datasets = bq_client.list_datasets()
-    if args.dataset not in datasets:
-        print('Creating dataset ' + args.dataset, file=sys.stderr)
-        create_bigquery_dataset(args, bigquery, bq_client)
+    datasets = [dataset._properties['datasetReference']['datasetId'] for dataset in bq_client.list_datasets()]
+    if profile_object['dataset'] not in datasets:
+        print('Creating dataset ' + profile_object['dataset'], file=sys.stderr)
+        create_bigquery_dataset(profile_object, bigquery, bq_client)
 
-    dataset_ref = bq_client.dataset(args.dataset)
+    dataset_ref = bq_client.dataset(profile_object['dataset'])
     table_ref = dataset_ref.table(args.table)
     job_config = bigquery.LoadJobConfig()
     job_config.source_format = bigquery.SourceFormat.CSV
     job_config.skip_leading_rows = 1
     job_config.autodetect = True
 
-    f = io.StringIO(csv)
-    job = bq_client.load_table_from_file(f, table_ref, job_config=job_config)
+    csv_file = io.StringIO(csv)
+    job = bq_client.load_table_from_file(csv_file, table_ref, job_config=job_config)
     job.result()
-    print("Loaded {} rows into {}:{}.".format(job.output_rows, args.dataset, args.table))
+    print("Loaded {} rows into {}:{}.".format(job.output_rows, profile_object['dataset'], args.table))
