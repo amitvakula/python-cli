@@ -1,9 +1,12 @@
 import argparse
+import datetime
+import io
+import json
 import sys
 import time
 
 from .auth import get_token_id
-from .profile import get_profile
+from .profile import get_profile, create_profile_object
 from ...errors import CliError
 from ...sdk_impl import create_flywheel_client, create_flywheel_session
 
@@ -25,12 +28,6 @@ def add_command(subparsers):
                                    description=IMPORT_HL7_DESC,
                                    formatter_class=argparse.RawTextHelpFormatter)
 
-    # profile = get_profile()
-    # project = profile.get('project')
-    # location = profile.get('location')
-    # dataset = profile.get('hc_dataset')
-    # hl7store = profile.get('hc_hl7store')
-
     parser.add_argument('--project', metavar='NAME',
                         help='GCP project (default: {})'.format('project'))
     parser.add_argument('--location', metavar='NAME',
@@ -41,7 +38,7 @@ def add_command(subparsers):
                         help='HL7 store (default: {})'.format('hl7store'))
     parser.add_argument('--ref', metavar='REF', action='append', dest='refs', default=[],
                         help='<id> to import')
-    parser.add_argument('--job_async', action='store_true',
+    parser.add_argument('--job-async', action='store_true',
                         help='Do not wait for import job to finish')
     parser.add_argument('--debug', action='store_true',
                         help='Run import gear in debug mode')
@@ -56,10 +53,18 @@ def add_command(subparsers):
 def import_hl7(args):
     # TODO fw de-identify profiles
     # TODO gcp de-identify
-    for param in ['project', 'location', 'dataset', 'hl7store']:
-        if not getattr(args, param, None):
-            raise CliError(param + ' required')
 
+    def upload_refs_json(project, refs):
+
+        refs_json = {'hl7s': [ref for ref in refs]}
+        json_file = io.BytesIO(json.dumps(refs_json).encode('utf-8'))
+        json_file.name = datetime.datetime.now().strftime('hl7-import-refs_%Y%m%d_%H%M%S.json')
+        json_file = {'file': json_file}
+        api.post('/projects/' + project._id + '/files', files=json_file)
+        return json_file.get('file').name
+
+    profile = get_profile()
+    profile_object = create_profile_object('hl7Store', profile, args)
     refs = args.refs or sys.stdin.read().split()
     if not refs:
         raise CliError('At least one ref required.')
@@ -70,19 +75,25 @@ def import_hl7(args):
     else:
         raise CliError('ghc-import gear is not installed on ' + api.baseurl.replace('/api', ''))
     client = create_flywheel_client()
+
     # TODO check whether it is a project
     project = client.lookup(args.container)
+    refs_in_json_file_name = upload_refs_json(project, refs)
+    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/hl7V2Stores/{hl7store}'.format(**profile_object)
     job = api.post('/jobs/add', json={
         'gear_id': gear['_id'],
-        'destination': {'type': 'project', 'id': project.id},
+        'destination': {'type': 'project', 'id': project._id},
+        'inputs': {
+                    'import_ids': {
+                        'type': 'project',
+                        'id': project._id,
+                        'name': refs_in_json_file_name
+                    },
+                },
         'config': {
             'auth_token_id': get_token_id(),
-            'gcp_project': args.project,
-            'hc_location': args.location,
-            'hc_dataset': args.dataset,
-            'hc_hl7store': args.hl7store,
-            'hl7_msg_ids': refs,
-            'project_id': project.id,
+            'hc_hl7store': store_name,
+            'project_id': project._id,
             'log_level': 'DEBUG' if args.debug else 'INFO',
         }
     })

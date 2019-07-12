@@ -1,11 +1,10 @@
 import argparse
 import sys
 
-from healthcare_api.client import Client, base
 from .auth import get_token
-# from .flywheel_gcp import GCP
 from .profile import get_profile, create_profile_object
 from ...errors import CliError
+from healthcare_api.client import Client, base
 
 QUERY_HL7_DESC = """
 Search for HL7 messages in Healthcare API.
@@ -42,9 +41,9 @@ def add_command(subparsers):
 
 def query_hl7(args):
     profile = get_profile()
-    query_object = create_profile_object('hl7Store', profile, args)
+    profile_object = create_profile_object('hl7Store', profile, args)
     hc_client = Client(get_token)
-    store_name = 'projects/{}/locations/{}/datasets/{}/hl7V2Stores/{}'.format(query_object['project'], query_object['location'], query_object['dataset'], query_object['hl7store'])
+    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/hl7V2Stores/{hl7store}'.format(**query_object)
     resp = hc_client.list_hl7v2_messages(store_name, filter_=args.query)
     ids = list(map(lambda x: x.split('/')[-1], resp['messages']))
     summary = 'Query matched {} resources'.format(len(ids))

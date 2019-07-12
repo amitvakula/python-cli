@@ -1,10 +1,10 @@
 import argparse
 import sys
 
-from healthcare_api.client import Client, base
 from .auth import get_token
 from .profile import get_profile, create_profile_object
 from ...errors import CliError
+from healthcare_api.client import Client, base
 
 QUERY_FHIR_DESC = """
 Search for FHIR resources in Healthcare API.
@@ -50,9 +50,9 @@ def query_fhir(args):
         return query_object
 
     profile = get_profile()
-    query_object = create_profile_object('fhirStore', profile, args)
+    profile_object = create_profile_object('fhirStore', profile, args)
     query = create_query_object(args)
-    store_name = 'projects/{}/locations/{}/datasets/{}/fhirStores/{}'.format(query_object['project'], query_object['location'], query_object['dataset'], query_object['fhirstore'])
+    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/fhirStores/{fhirstore}'.format(**profile_object)
     hc_client = Client(get_token)
     resp = hc_client.search_fhir_resources(store_name, args.type, **query)
     refs = []

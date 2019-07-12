@@ -1,9 +1,12 @@
 import argparse
+import datetime
+import io
+import json
 import sys
 import time
 
 from .auth import get_token_id
-from .profile import get_profile
+from .profile import get_profile, create_profile_object
 from ...errors import CliError
 from ...sdk_impl import create_flywheel_client, create_flywheel_session
 
@@ -26,12 +29,6 @@ def add_command(subparsers):
         description=IMPORT_DICOM_DESC,
         formatter_class=argparse.RawTextHelpFormatter)
 
-    # profile = get_profile()
-    # project = profile.get('project')
-    # location = profile.get('location')
-    # dataset = profile.get('hc_dataset')
-    # dicomstore = profile.get('hc_dicomstore')
-
     parser.add_argument('--project', metavar='NAME',
         help='GCP project (default: {})'.format('project'))
     parser.add_argument('--location', metavar='NAME',
@@ -44,7 +41,7 @@ def add_command(subparsers):
         help='Study/SeriesInstanceUID to import')
     parser.add_argument('--de-identify', action='store_true',
         help='De-identify dicoms before import')
-    parser.add_argument('--job_async', action='store_true',
+    parser.add_argument('--job-async', action='store_true',
         help='Do not wait for import job to finish')
     parser.add_argument('container', metavar='CONTAINER',
         help='Flywheel project to import into (group/proj)')
@@ -57,9 +54,18 @@ def add_command(subparsers):
 def import_dicom(args):
     # TODO fw de-identify profiles
     # TODO gcp de-identify
-    for param in ['project', 'location', 'dataset', 'dicomstore']:
-        if not getattr(args, param, None):
-            raise CliError(param + ' required')
+
+    def upload_uids_json(project, uids):
+
+        uids_json = {'dicoms': [uid for uid in uids]}
+        json_file = io.BytesIO(json.dumps(uids_json).encode('utf-8'))
+        json_file.name = datetime.datetime.now().strftime('dicom-import-uids_%Y%m%d_%H%M%S.json')
+        json_file = {'file': json_file}
+        api.post('/projects/' + project._id + '/files', files=json_file)
+        return json_file.get('file').name
+
+    profile = get_profile()
+    profile_object = create_profile_object('dicomStore', profile, args)
 
     uids = args.uids or sys.stdin.read().split()
     if not uids:
@@ -71,20 +77,27 @@ def import_dicom(args):
     else:
         raise CliError('ghc-import gear is not installed on ' + api.baseurl.replace('/api', ''))
     client = create_flywheel_client()
+
     # TODO check whether it is a project
     project = client.lookup(args.container)
+    uids_in_json_file_name = upload_uids_json(project, uids)
+    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**profile_object)
+
     job = api.post('/jobs/add', json={
         'gear_id': gear['_id'],
-        'destination': {'type': 'project', 'id': project.id},
+        'destination': {'type': 'project', 'id': project._id},
+        'inputs': {
+                    'import_ids': {
+                        'type': 'project',
+                        'id': project._id,
+                        'name': uids_in_json_file_name
+                    },
+                },
         'config': {
             'auth_token_id': get_token_id(),
-            'gcp_project': args.project,
-            'hc_location': args.location,
-            'hc_dataset': args.dataset,
-            'hc_datastore': args.dicomstore,
-            'uids': args.uids,
+            'hc_dicomstore': store_name,
             'de_identify': args.de_identify,
-            'project_id': project.id,
+            'project_id': project._id,
         }
     })
     job_id = job['_id']

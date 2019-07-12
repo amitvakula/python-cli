@@ -1,14 +1,14 @@
 import argparse
 import itertools
-import sys
 import json
-import google.oauth2.credentials
+import sys
 
-from healthcare_api.client import Client, base
 from .auth import get_token
 from .profile import get_profile, create_profile_object
 from ...errors import CliError
 from google.cloud import bigquery
+import google.oauth2.credentials
+from healthcare_api.client import Client, base
 
 
 QUERY_DICOM_DESC = """
@@ -93,13 +93,6 @@ def query_dicom(args):
             }
         return result
 
-    def parse_query_condition(sql):
-        if len(sql) == 0:
-            return
-        else:
-            where = args.sql[1].split('=')
-            return '{}="{}"'.format(where[0], where[1])
-
     def create_bigquery_dataset(args, bigquery, bq_client):
         dataset = bigquery.Dataset('{}.{}'.format(query_object['project'], args.bq_dataset))
         dataset.location = args.bq_location
@@ -134,12 +127,12 @@ def query_dicom(args):
             return where
 
     profile = get_profile()
-    query_object = create_profile_object('dicomStore', profile, args)
+    profile_object = create_profile_object('dicomStore', profile, args)
     credentials = google.oauth2.credentials.Credentials(get_token())
     hc_client = Client(get_token)
     bq_client = bigquery.Client(query_object['project'], credentials)
 
-    store_name = 'projects/{}/locations/{}/datasets/{}/dicomStore/{}'.format(query_object['project'], query_object['location'], query_object['dataset'], query_object['dicomstore'])
+    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**profile_object)
     tables = bq_client.list_tables('{}.{}'.format(query_object['project'], query_object['dataset']))
 
     if args.export or query_object['dicomstore'] not in list_table_ids(tables):
@@ -152,9 +145,8 @@ def query_dicom(args):
         query_job = bq_client.query(query)  # API request
         query_result = query_job.result()
         result = parse_query_result(query_job, query_result)
-    except base.GCPError as ex:
-        raise CliError(str(ex))
-    except Exception as e: raise
+    except Exception as e:
+        raise
 
     hierarchy = result_to_hierarchy(result)
     summary = 'Query matched {total_studies} studies, {total_series} series, {total_images} images'.format(**hierarchy)

@@ -42,9 +42,9 @@ def add_command(subparsers):
     dataset = 'flywheel_views'
 
     parser.add_argument('--project', metavar='NAME',
-        help='GCP project (default: {})'.format('project'))
+        help='GCP project (defaults to your GCP profile project)')
     parser.add_argument('--dataset', metavar='NAME',
-        help='Dataset (default: {})'.format('dataset'))
+        help='Dataset (defaults to your GCP profile dataset)')
     parser.add_argument('--table', metavar='NAME',
         help='Table (default: username_YYYYMMDD_HHMMSS)')
     parser.add_argument('--bq_location', metavar='NAME',

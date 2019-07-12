@@ -111,7 +111,7 @@ def get_profiles():
 
 def get_profile():
     profiles = get_profiles()
-    if profiles:
+    if profiles and profiles.get('ghc_import').get('profiles'):
         for profile, value in profiles['ghc_import']['profiles'].items():
             if profile == profiles['ghc_import']['selected_profile']:
                 return value
@@ -134,35 +134,35 @@ def args_to_profile(args):
 
 
 def create_profile_object(store, profile=None, args=None):
+    lowercase_store = store.lower()
     if profile:
-        if profile[store]:
+        if profile.get(store):
             profile_elements = profile[store].split('/')[1::2]
             return {
                 'project': profile_elements[0],
                 'location': profile_elements[1],
                 'dataset': profile_elements[2],
-                store.lower(): profile_elements[3]
+                lowercase_store: profile_elements[3]
             }
         else:
-            print("Kindly provide {} in your profile!".format(store.lower()))
+            print("Kindly provide {} in your profile!".format(lowercase_store))
             sys.exit(1)
-    else:
-        for param in ['project', 'location', 'dataset', store.lower()]:
-            if not getattr(args, param, None):
-                raise CliError(param + ' required')
-        return {
-            'project': args.project,
-            'location': args.location,
-            'dataset': args.dataset,
-            store.lower(): vars(args)[store.lower()]
-        }
+    for param in ['project', 'location', 'dataset', lowercase_store]:
+        if not getattr(args, param, None):
+            raise CliError(param + ' required')
+    return {
+        'project': args.project,
+        'location': args.location,
+        'dataset': args.dataset,
+        lowercase_store: getattr(args, lowercase_store)
+    }
 
 
 def profile_list(args):
     profiles = get_profiles()
-    if profiles:
+    if profiles and profiles.get('ghc_import').get('profiles'):
         active_profile = profiles['ghc_import']['selected_profile']
-        profiles = [v for k, v in profiles['ghc_import']['profiles'].items()]
+        profiles = list(profiles['ghc_import']['profiles'].values())
         for index, profile in enumerate(profiles):
             print('Profile: {}'.format(profile['name']) + (' (active)' if profile['name'] == active_profile else ''))
             for key in PROFILE_PROPERTIES:
@@ -173,7 +173,7 @@ def profile_list(args):
 
 def profile_create(args):
 
-    def create_profile(additional_profile, base_path):
+    def create_profile(token, additional_profile, base_path):
         return {
                     additional_profile['name']: {
                         "auth_token": token,
@@ -203,19 +203,19 @@ def profile_create(args):
 
     existing_profiles = get_profiles()
     additional_profile = args_to_profile(args)
-    base_path = 'projects/{}/locations/{}/datasets/{}/'.format(additional_profile['project'], additional_profile['location'], additional_profile['hc_dataset'])
+    base_path = 'projects/{project}/locations/{location}/datasets/{hc_dataset}/'.format(**additional_profile)
 
     if not existing_profiles:
         brand_new_profile = {
                     "selected_profile": additional_profile['name'],
-                    "profiles": create_profile(additional_profile, base_path)
+                    "profiles": create_profile(token, additional_profile, base_path)
                     }
         api.post('/users/self/info', json={'set': {'ghc_import': brand_new_profile}})
         print('Successfully created GCP profile ' + args.name)
     elif args.name in existing_profiles['ghc_import']['profiles']:
         raise CliError('GCP profile already exists: ' + args.name)
     else:
-        existing_profiles['ghc_import']['profiles'].update(create_profile(additional_profile, base_path))
+        existing_profiles['ghc_import']['profiles'].update(create_profile(token, additional_profile, base_path))
         existing_profiles['ghc_import']['selected_profile'] = additional_profile['name']
         api.post('/users/self/info', json={'set': existing_profiles})
         print('Successfully added GCP profile ' + args.name)
@@ -232,7 +232,7 @@ def profile_update(args):
                 }
 
     profiles = get_profiles()
-    profiles_list = [v for k, v in profiles['ghc_import']['profiles'].items()]
+    profiles_list = list(profiles['ghc_import']['profiles'].values())
 
     for profile in profiles_list:
         if profile['name'] == args.name:
@@ -240,7 +240,7 @@ def profile_update(args):
     else:
         raise CliError('GCP profile not found: ' + args.name)
     base_path_elements = profile['dicomStore'].split('/')[1::2]
-    base_path = 'projects/{}/locations/{}/datasets/{}/'.format(base_path_elements[0], base_path_elements[1], base_path_elements[2])
+    base_path = 'projects/{}/locations/{}/datasets/{}/'.format(*base_path_elements)
     profile_update_data = args_to_profile(args)
     updated_profile = update_profile(profile, profile_update_data, base_path)
 
@@ -252,7 +252,7 @@ def profile_update(args):
 
 def profile_delete(args):
     profiles = get_profiles()
-    profiles_list = [v for k, v in profiles['ghc_import']['profiles'].items()]
+    profiles_list = list(profiles['ghc_import']['profiles'].values())
 
     for profile in profiles_list:
         if profile['name'] == args.name:
