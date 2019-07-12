@@ -47,6 +47,14 @@ def add_command(subparsers):
     profile_subparsers = parser.add_subparsers(
         title='available gcp profile commands', metavar='')
 
+    select_parser = profile_subparsers.add_parser('select-profile',
+        help='Select which profile to be active',
+        description='Select which profile to be active')
+    select_parser.add_argument('name', metavar='NAME',
+        help='Profile name to select')
+    select_parser.set_defaults(func=select_profile)
+    select_parser.set_defaults(parser=select_parser)
+
     list_parser = profile_subparsers.add_parser('list',
         help='List GCP profiles',
         description='List available GCP user profiles.')
@@ -158,6 +166,24 @@ def create_profile_object(store, profile=None, args=None):
     }
 
 
+def select_profile(args):
+    api = create_flywheel_session()
+    profiles = get_profiles()
+    if profiles and profiles.get('ghc_import').get('profiles'):
+        profiles_list = list(profiles['ghc_import']['profiles'].values())
+    else:
+        profiles_list = {}
+    for profile in profiles_list:
+        if profile['name'] == args.name:
+            break
+    else:
+        raise CliError('GCP profile not found: ' + args.name)
+
+    profiles['ghc_import'].update({'selected_profile': args.name})
+    api.post('/users/self/info', json={'set': profiles})
+    print('Selected profile ' + args.name)
+
+
 def profile_list(args):
     profiles = get_profiles()
     if profiles and profiles.get('ghc_import').get('profiles'):
@@ -172,7 +198,6 @@ def profile_list(args):
 
 
 def profile_create(args):
-
     def create_profile(token, additional_profile, base_path):
         return {
                     additional_profile['name']: {
@@ -204,8 +229,7 @@ def profile_create(args):
     existing_profiles = get_profiles()
     additional_profile = args_to_profile(args)
     base_path = 'projects/{project}/locations/{location}/datasets/{hc_dataset}/'.format(**additional_profile)
-
-    if not existing_profiles:
+    if not existing_profiles.get('ghc_import').get('profiles'):
         brand_new_profile = {
                     "selected_profile": additional_profile['name'],
                     "profiles": create_profile(token, additional_profile, base_path)
@@ -232,7 +256,10 @@ def profile_update(args):
                 }
 
     profiles = get_profiles()
-    profiles_list = list(profiles['ghc_import']['profiles'].values())
+    if profiles and profiles.get('ghc_import').get('profiles'):
+        profiles_list = list(profiles['ghc_import']['profiles'].values())
+    else:
+        profiles_list = {}
 
     for profile in profiles_list:
         if profile['name'] == args.name:
@@ -251,8 +278,17 @@ def profile_update(args):
 
 
 def profile_delete(args):
+
+    def remove_profile(profiles, profile):
+        reduced_profiles = profiles['ghc_import']['profiles']
+        del reduced_profiles[profile['name']]
+        return reduced_profiles
+
     profiles = get_profiles()
-    profiles_list = list(profiles['ghc_import']['profiles'].values())
+    if profiles and profiles.get('ghc_import').get('profiles'):
+        profiles_list = list(profiles['ghc_import']['profiles'].values())
+    else:
+        profiles_list = {}
 
     for profile in profiles_list:
         if profile['name'] == args.name:
@@ -260,10 +296,8 @@ def profile_delete(args):
     else:
         raise CliError('GCP profile not found: ' + args.name)
 
-    def remove_profile(profiles, profile):
-        reduced_profiles = profiles['ghc_import']['profiles']
-        del reduced_profiles[profile['name']]
-        return reduced_profiles
+    if profile['name'] == profiles['ghc_import']['selected_profile']:
+        profiles['ghc_import'].update({'selected_profile': ''})
 
     reduced = remove_profile(profiles, profile)
     api = create_flywheel_session()

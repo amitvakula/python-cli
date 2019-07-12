@@ -127,12 +127,12 @@ def query_dicom(args):
             return where
 
     profile = get_profile()
-    profile_object = create_profile_object('dicomStore', profile, args)
+    query_object = create_profile_object('dicomStore', profile, args)
     credentials = google.oauth2.credentials.Credentials(get_token())
     hc_client = Client(get_token)
     bq_client = bigquery.Client(query_object['project'], credentials)
 
-    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**profile_object)
+    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**query_object)
     tables = bq_client.list_tables('{}.{}'.format(query_object['project'], query_object['dataset']))
 
     if args.export or query_object['dicomstore'] not in list_table_ids(tables):
