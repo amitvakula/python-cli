@@ -43,7 +43,7 @@ def query_hl7(args):
     profile = get_profile()
     profile_object = create_profile_object('hl7Store', profile, args)
     hc_client = Client(get_token)
-    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/hl7V2Stores/{hl7store}'.format(**query_object)
+    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/hl7V2Stores/{hl7store}'.format(**profile_object)
     resp = hc_client.list_hl7v2_messages(store_name, filter_=args.query)
     ids = list(map(lambda x: x.split('/')[-1], resp['messages']))
     summary = 'Query matched {} resources'.format(len(ids))
