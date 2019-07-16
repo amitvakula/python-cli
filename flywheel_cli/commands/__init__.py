@@ -5,8 +5,9 @@ from . import import_bruker
 from . import import_dicom
 from . import import_bids
 from . import import_parrec
-
+from . import providers
 from . import export_bids
+from .. import sdk_impl
 
 from . import retry_job
 
@@ -40,6 +41,9 @@ def add_commands(parser):
     global_parser = Config.get_global_parser()
     import_parser = Config.get_import_parser()
     deid_parser = Config.get_deid_parser()
+
+
+    user_config = sdk_impl.load_config()
 
     # map commands for help function
     parsers = {}
@@ -110,6 +114,22 @@ def add_commands(parser):
 
     # Link help commands
     set_subparser_print_help(parser_job, job_subparsers)
+
+    # =====
+    # providers
+    # =====
+    if user_config.get('root', False):
+        parser_provider = subparsers.add_parser('provider', help='Add/Modify/Assign providers in the Flywheel system')
+        parser_provider.set_defaults(config=get_config)
+        parsers['provider'] = parser_provider
+
+        provider_subparsers = parser_provider.add_subparsers(title='Available provider commands', metavar='')
+        parsers['provider add'] = providers.add_add_command(provider_subparsers, [])
+        parsers['provider modify'] = providers.add_modify_command(provider_subparsers, [])
+        parsers['provider assign'] = providers.add_assign_command(provider_subparsers, [])
+
+        # Link help commands
+        set_subparser_print_help(parser_provider, provider_subparsers)
 
 
     # =====

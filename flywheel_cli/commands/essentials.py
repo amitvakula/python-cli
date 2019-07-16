@@ -64,7 +64,7 @@ def login(args):
         login_id = sdk_impl.get_login_id(fw)
 
         # Save credentials
-        sdk_impl.save_api_key(args.api_key)
+        sdk_impl.save_api_key(args.api_key, root=user['root'])
 
         print('You are now logged in as: {}!'.format(login_id))
     except Exception as e:

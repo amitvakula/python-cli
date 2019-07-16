@@ -54,7 +54,7 @@ def create_flywheel_client(require=True):
     return result
 
 
-def save_api_key(api_key):
+def save_api_key(api_key, root=False):
     """Save the given api key to the user's config file.
 
     If api_key is None, then remove it from the file.
@@ -65,8 +65,10 @@ def save_api_key(api_key):
 
     if api_key is None:
         config.pop('key', None)
+        config.pop('root', None)
     else:
         config['key'] = api_key
+        config['root'] = root
 
     path = os.path.expanduser(CONFIG_PATH)
 
