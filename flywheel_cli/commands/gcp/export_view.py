@@ -44,10 +44,10 @@ def add_command(subparsers):
     parser.add_argument('--project', metavar='NAME',
         help='GCP project (defaults to your GCP profile project)')
     parser.add_argument('--dataset', metavar='NAME',
-        help='Dataset (defaults to your GCP profile dataset)')
+        help='Dataset (if not provided, defaults to your GCP profile dataset name)')
     parser.add_argument('--table', metavar='NAME',
         help='Table (default: username_YYYYMMDD_HHMMSS)')
-    parser.add_argument('--bq_location', metavar='NAME',
+    parser.add_argument('--bq-location', metavar='NAME',
         help='Export new BigQuery dataset location')
 
 
@@ -86,7 +86,7 @@ def export_view(args):
         args.table = datetime.datetime.now().strftime(name + '_%Y%m%d_%H%M%S')
     print('Exporting to BigQuery table ' + args.table, file=sys.stderr)
 
-    datasets = [dataset._properties['datasetReference']['datasetId'] for dataset in bq_client.list_datasets()]
+    datasets = [dataset.dataset_id for dataset in bq_client.list_datasets()]
     if profile_object['dataset'] not in datasets:
         print('Creating dataset ' + profile_object['dataset'], file=sys.stderr)
         create_bigquery_dataset(profile_object, bigquery, bq_client)

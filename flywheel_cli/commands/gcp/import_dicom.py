@@ -1,14 +1,11 @@
 import argparse
-import datetime
-import io
-import json
 import sys
-import time
 
 from .auth import get_token_id
-from .profile import get_profile, create_profile_object
+from .profile import get_profile
 from ...errors import CliError
 from ...sdk_impl import create_flywheel_client, create_flywheel_session
+from .import_ghc import add_job, log_import_job, upload_json, check_ghc_import_gear
 
 
 IMPORT_DICOM_DESC = """
@@ -30,13 +27,13 @@ def add_command(subparsers):
         formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument('--project', metavar='NAME',
-        help='GCP project (default: {})'.format('project'))
+        help='Project (defaults to your GCP profile project)')
     parser.add_argument('--location', metavar='NAME',
-        help='Location (default: {})'.format('location'))
+        help='Location (defaults to your GCP profile location)')
     parser.add_argument('--dataset', metavar='NAME',
-        help='Dataset (default: {})'.format('dataset'))
+        help='Dataset (defaults to your GCP profile dataset)')
     parser.add_argument('--dicomstore', metavar='NAME',
-        help='Dicomstore (default: {})'.format('dicomstore'))
+        help='Dicomstore (defaults to your GCP profile dicomstore)')
     parser.add_argument('--uid', metavar='UID', action='append', dest='uids', default=[],
         help='Study/SeriesInstanceUID to import')
     parser.add_argument('--de-identify', action='store_true',
@@ -55,65 +52,17 @@ def import_dicom(args):
     # TODO fw de-identify profiles
     # TODO gcp de-identify
 
-    def upload_uids_json(project, uids):
-
-        uids_json = {'dicoms': [uid for uid in uids]}
-        json_file = io.BytesIO(json.dumps(uids_json).encode('utf-8'))
-        json_file.name = datetime.datetime.now().strftime('dicom-import-uids_%Y%m%d_%H%M%S.json')
-        json_file = {'file': json_file}
-        api.post('/projects/' + project._id + '/files', files=json_file)
-        return json_file.get('file').name
-
     profile = get_profile()
-    profile_object = create_profile_object('dicomStore', profile, args)
+    api = create_flywheel_session()
 
     uids = args.uids or sys.stdin.read().split()
     if not uids:
         raise CliError('At least one UID required.')
-    api = create_flywheel_session()
-    for gear in api.get('/gears'):
-        if gear['gear']['name'] == 'ghc-import':
-            break
-    else:
-        raise CliError('ghc-import gear is not installed on ' + api.baseurl.replace('/api', ''))
+
+    gear = check_ghc_import_gear(api)
     client = create_flywheel_client()
-
-    # TODO check whether it is a project
     project = client.lookup(args.container)
-    uids_in_json_file_name = upload_uids_json(project, uids)
-    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**profile_object)
+    uids_in_json_file_name = upload_json('dicom', project, uids, api)
 
-    job = api.post('/jobs/add', json={
-        'gear_id': gear['_id'],
-        'destination': {'type': 'project', 'id': project._id},
-        'inputs': {
-                    'import_ids': {
-                        'type': 'project',
-                        'id': project._id,
-                        'name': uids_in_json_file_name
-                    },
-                },
-        'config': {
-            'auth_token_id': get_token_id(),
-            'hc_dicomstore': store_name,
-            'de_identify': args.de_identify,
-            'project_id': project._id,
-        }
-    })
-    job_id = job['_id']
-    print('Started ghc-import job ' + job_id)
-
-    if not args.job_async:
-        jobs_api = client.jobs_api
-        last_log_entry = 0
-        print('Waiting for import job to finish...')
-        while True:
-            time.sleep(1)
-            logs = jobs_api.get_job_logs(job_id)['logs']
-            for i in range(last_log_entry, len(logs)):
-                sys.stdout.write(logs[i]['msg'])
-                last_log_entry = i + 1
-            job = jobs_api.get_job(job_id)
-            if job.state in ['failed', 'complete']:
-                print('Job ' + job.state)
-                break
+    job = add_job('dicomStore', api, gear, project, uids_in_json_file_name, profile, get_token_id, args)
+    log_import_job(args, client, job)

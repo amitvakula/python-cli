@@ -3,12 +3,13 @@ import itertools
 import json
 import sys
 
-from .auth import get_token
-from .profile import get_profile, create_profile_object
-from ...errors import CliError
 from google.cloud import bigquery
 import google.oauth2.credentials
 from healthcare_api.client import Client, base
+
+from .auth import get_token
+from .profile import get_profile, create_profile_object
+from ...errors import CliError
 
 
 QUERY_DICOM_DESC = """
@@ -83,9 +84,6 @@ def add_command(subparsers):
 
 def query_dicom(args):
 
-    def list_table_ids(tables):
-        return [table.table_id for table in tables]
-
     def parse_query_result(query_job, query_result):
         result = {
             'query_id': query_job.job_id,
@@ -135,7 +133,7 @@ def query_dicom(args):
     store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**query_object)
     tables = bq_client.list_tables('{}.{}'.format(query_object['project'], query_object['dataset']))
 
-    if args.export or query_object['dicomstore'] not in list_table_ids(tables):
+    if args.export or query_object['dicomstore'] not in [table.table_id for table in tables]:
         print('Exporting Healthcare API dicomstore to BigQuery')
         export_controller(list(bq_client.list_datasets()), args, bigquery, bq_client)
 

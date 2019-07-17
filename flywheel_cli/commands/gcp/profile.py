@@ -152,9 +152,8 @@ def create_profile_object(store, profile=None, args=None):
                 'dataset': profile_elements[2],
                 lowercase_store: profile_elements[3]
             }
-        else:
-            print("Kindly provide {} in your profile!".format(lowercase_store))
-            sys.exit(1)
+        print("Kindly provide {} in your profile!".format(lowercase_store))
+        sys.exit(1)
     for param in ['project', 'location', 'dataset', lowercase_store]:
         if not getattr(args, param, None):
             raise CliError(param + ' required')
@@ -229,12 +228,12 @@ def profile_create(args):
     existing_profiles = get_profiles()
     additional_profile = args_to_profile(args)
     base_path = 'projects/{project}/locations/{location}/datasets/{hc_dataset}/'.format(**additional_profile)
-    if not existing_profiles.get('ghc_import').get('profiles'):
-        brand_new_profile = {
+    if not existing_profiles:
+        new_profile = {
                     "selected_profile": additional_profile['name'],
                     "profiles": create_profile(token, additional_profile, base_path)
                     }
-        api.post('/users/self/info', json={'set': {'ghc_import': brand_new_profile}})
+        api.post('/users/self/info', json={'set': {'ghc_import': new_profile}})
         print('Successfully created GCP profile ' + args.name)
     elif args.name in existing_profiles['ghc_import']['profiles']:
         raise CliError('GCP profile already exists: ' + args.name)
