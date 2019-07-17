@@ -6,6 +6,7 @@ import time
 
 from .auth import get_token_id
 from ...errors import CliError
+from ...sdk_impl import SdkUploadWrapper
 
 
 def add_job(store, api, gear, project, json_file, store_name, get_token_id, args):
@@ -25,6 +26,7 @@ def add_job(store, api, gear, project, json_file, store_name, get_token_id, args
                 'project_id': project._id,
                 'log_level': 'DEBUG' if args.debug else 'INFO',
                 }
+
     return api.post('/jobs/add', json={
             'gear_id': gear['_id'],
             'destination': {'type': 'project', 'id': project._id},
@@ -58,14 +60,13 @@ def log_import_job(args, client, job):
                 break
 
 
-def upload_json(file_type, project, identifiers, api):
-
+def upload_json(file_type, project, identifiers, client):
+    uploader = SdkUploadWrapper(client)
     identifiers_json = {file_type + 's': identifiers}
     json_file = io.BytesIO(json.dumps(identifiers_json).encode('utf-8'))
     json_file.name = datetime.datetime.now().strftime(file_type + '-import_%Y%m%d_%H%M%S.json')
-    json_file = {'file': json_file}
-    api.post('/projects/' + project._id + '/files', files=json_file)
-    return json_file.get('file').name
+    uploader.upload(project, json_file.name, json_file)
+    return json_file.name
 
 
 def check_ghc_import_gear(api):

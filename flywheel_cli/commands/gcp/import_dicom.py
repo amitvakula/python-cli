@@ -63,7 +63,7 @@ def import_dicom(args):
     gear = check_ghc_import_gear(api)
     client = create_flywheel_client()
     project = client.lookup(args.container)
-    uids_in_json_file_name = upload_json('dicom', project, uids, api)
+    uids_in_json_file_name = upload_json('dicom', project, uids, client)
     store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**profile_object)
     job = add_job('dicomStore', api, gear, project, uids_in_json_file_name, store_name, get_token_id, args)
     log_import_job(args, client, job)

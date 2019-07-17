@@ -62,7 +62,7 @@ def import_hl7(args):
     gear = check_ghc_import_gear(api)
     client = create_flywheel_client()
     project = client.lookup(args.container)
-    refs_in_json_file_name = upload_json('hl7', project, refs, api)
+    refs_in_json_file_name = upload_json('hl7', project, refs, client)
     store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/hl7V2Stores/{hl7store}'.format(**profile_object)
     job = add_job('hl7Store', api, gear, project, refs_in_json_file_name, store_name, get_token_id, args)
     log_import_job(args, client, job)

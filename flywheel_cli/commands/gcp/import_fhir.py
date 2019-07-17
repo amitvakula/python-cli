@@ -63,7 +63,7 @@ def import_fhir(args):
     gear = check_ghc_import_gear(api)
     client = create_flywheel_client()
     project = client.lookup(args.container)
-    refs_in_json_file_name = upload_json('fhir', project, refs, api)
+    refs_in_json_file_name = upload_json('fhir', project, refs, client)
     store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/fhirStores/{fhirstore}'.format(**profile_object)
     job = add_job('fhirStore', api, gear, project, refs_in_json_file_name, store_name, get_token_id, args)
     log_import_job(args, client, job)
