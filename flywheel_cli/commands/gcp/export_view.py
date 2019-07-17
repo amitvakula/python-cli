@@ -3,14 +3,15 @@ import datetime
 import io
 import re
 import sys
+
 import google.oauth2.credentials
+from google.cloud import bigquery
 
 from ...errors import CliError
 from ...sdk_impl import create_flywheel_session
 from ..view import lookup, lookup_view
 from .auth import get_token
 from .profile import get_profile, create_profile_object
-from google.cloud import bigquery
 
 
 

@@ -8,9 +8,23 @@ from .auth import get_token_id
 from ...errors import CliError
 
 
-def add_job(store, api, gear, project, uids_in_json_file_name, profile, get_token_id, args):
-    store_name = profile.get(store)
-    lowercase_store = store.lower()
+def add_job(store, api, gear, project, json_file, store_name, get_token_id, args):
+
+    def config_job(store, store_name, project, args):
+        lowercase_store = store.lower()
+        if store == 'dicomStore':
+            return {
+                    'auth_token_id': get_token_id(),
+                    'hc_' + lowercase_store: store_name,
+                    'de_identify': args.de_identify,
+                    'project_id': project._id,
+                    }
+        return {
+                'auth_token_id': get_token_id(),
+                'hc_' + lowercase_store: store_name,
+                'project_id': project._id,
+                'log_level': 'DEBUG' if args.debug else 'INFO',
+                }
     return api.post('/jobs/add', json={
             'gear_id': gear['_id'],
             'destination': {'type': 'project', 'id': project._id},
@@ -18,15 +32,10 @@ def add_job(store, api, gear, project, uids_in_json_file_name, profile, get_toke
                         'import_ids': {
                             'type': 'project',
                             'id': project._id,
-                            'name': uids_in_json_file_name
+                            'name': json_file
                         },
                     },
-            'config': {
-                'auth_token_id': get_token_id(),
-                'hc_' + lowercase_store: store_name,
-                # 'de_identify': args.de_identify or None,
-                'project_id': project._id,
-            }
+            'config': config_job(store, store_name, project, args)
         })
 
 
@@ -63,6 +72,5 @@ def check_ghc_import_gear(api):
     for gear in api.get('/gears'):
         if gear['gear']['name'] == 'ghc-import':
             return gear
-            # break
     else:
         raise CliError('ghc-import gear is not installed on ' + api.baseurl.replace('/api', ''))

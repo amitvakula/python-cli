@@ -2,10 +2,10 @@ import argparse
 import sys
 
 from .auth import get_token_id
+from .import_ghc import add_job, log_import_job, upload_json, check_ghc_import_gear
 from .profile import get_profile, create_profile_object
 from ...errors import CliError
 from ...sdk_impl import create_flywheel_client, create_flywheel_session
-from .import_dicom import add_job, log_import_job, upload_json, check_ghc_import_gear
 
 IMPORT_FHRI_DESC = """
 Import FHIR resources from Google Healthcare API by resource ref. Resource reference format is the following:
@@ -27,13 +27,13 @@ def add_command(subparsers):
                                    formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument('--project', metavar='NAME',
-        help='Project (defaults to your GCP profile project)')
+                        help='Project (defaults to your GCP profile project)')
     parser.add_argument('--location', metavar='NAME',
-        help='Location (defaults to your GCP profile location)')
+                        help='Location (defaults to your GCP profile location)')
     parser.add_argument('--dataset', metavar='NAME',
-        help='Dataset (defaults to your GCP profile dataset)')
+                        help='Dataset (defaults to your GCP profile dataset)')
     parser.add_argument('--fhirstore', metavar='NAME',
-        help='Fhirstore (defaults to your GCP profile fhirstore, if exists)')
+                        help='Fhirstore (defaults to your GCP profile fhirstore, if exists)')
     parser.add_argument('--ref', metavar='REF', action='append', dest='refs', default=[],
                         help='<type>/<resource_id> to import')
     parser.add_argument('--job-async', action='store_true',
@@ -53,7 +53,7 @@ def import_fhir(args):
     # TODO gcp de-identify
 
     profile = get_profile()
-    # profile_object = create_profile_object('fhirStore', profile, args)
+    profile_object = create_profile_object('fhirStore', profile, args)
     api = create_flywheel_session()
 
     refs = args.refs or sys.stdin.read().split()
@@ -64,6 +64,6 @@ def import_fhir(args):
     client = create_flywheel_client()
     project = client.lookup(args.container)
     refs_in_json_file_name = upload_json('fhir', project, refs, api)
-
-    job = add_job('fhirStore', api, gear, project, refs_in_json_file_name, profile, get_token_id, args)
+    store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/fhirStores/{fhirstore}'.format(**profile_object)
+    job = add_job('fhirStore', api, gear, project, refs_in_json_file_name, store_name, get_token_id, args)
     log_import_job(args, client, job)
