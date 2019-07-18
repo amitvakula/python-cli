@@ -63,7 +63,7 @@ def export_view(args):
     profile = get_profile()
     profile_object = create_profile_object('dicomStore', profile, args)
 
-    def create_bigquery_dataset(profile, bigquery, bq_client):
+    def create_bigquery_dataset(profile, bq_client, args):
         dataset = bigquery.Dataset('{}.{}'.format(profile['project'], profile['dataset']))
         dataset.location = args.bq_location
         dataset = bq_client.create_dataset(dataset)
@@ -90,7 +90,7 @@ def export_view(args):
     datasets = [dataset.dataset_id for dataset in bq_client.list_datasets()]
     if profile_object['dataset'] not in datasets:
         print('Creating dataset ' + profile_object['dataset'], file=sys.stderr)
-        create_bigquery_dataset(profile_object, bigquery, bq_client)
+        create_bigquery_dataset(profile_object, bq_client, args)
 
     dataset_ref = bq_client.dataset(profile_object['dataset'])
     table_ref = dataset_ref.table(args.table)
