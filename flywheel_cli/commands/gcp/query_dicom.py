@@ -5,7 +5,7 @@ import sys
 
 from google.cloud import bigquery
 import google.oauth2.credentials
-from healthcare_api.client import Client, base
+from healthcare_api.client import Client
 
 from .auth import get_token
 from .profile import get_profile, create_profile_object
@@ -96,24 +96,48 @@ def query_dicom(args):
         dataset.location = args.bq_location
         dataset = bq_client.create_dataset(dataset)
 
-    def export_controller(dataset_list, profile_object, args, bq_client):
-        datasets = []
-        for dataset in dataset_list:
-            datasets.append(dataset.dataset_id)
-        if args.bq_dataset in datasets:
-            print('Dataset already exists')
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(profile_object['project'], args.bq_dataset, args.bq_table or profile_object['dicomstore']))
-        elif args.bq_dataset:
-            print('New dataset detected')
-            create_bigquery_dataset(args, profile_object, bq_client)
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(profile_object['project'], args.bq_dataset, args.bq_table or profile_object['dicomstore']))
-        elif profile_object['dataset'] in datasets:
-            print('Dataset ok, but no table, creating...')
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(profile_object['project'], profile_object['dataset'], profile_object['dicomstore']))
-        else:
-            print('Dataset not in bq yet, creating...')
-            create_bigquery_dataset(args, profile_object, bq_client)
-            hc_client.export_dicom_to_bigquery(store_name, 'bq://{}.{}.{}'.format(profile_object['project'], profile_object['dataset'], profile_object['dicomstore']))
+    def export_controller(dataset_list, profile_object, args, bq_client, hc_client):
+        def create_body(args, profile_object):
+            datasets = []
+            for dataset in dataset_list:
+                datasets.append(dataset.dataset_id)
+            if args.bq_dataset in datasets:
+                print('Dataset already exists')
+                return {
+                    "bigqueryDestination": {
+                        "tableUri": 'bq://{}.{}.{}'.format(profile_object['project'], args.bq_dataset, args.bq_table or profile_object['dicomstore']),
+                        "force": True
+                    }
+                }
+            elif args.bq_dataset:
+                print('New dataset detected')
+                create_bigquery_dataset(args, profile_object, bq_client)
+                return {
+                    "bigqueryDestination": {
+                        "tableUri": 'bq://{}.{}.{}'.format(profile_object['project'], args.bq_dataset, args.bq_table or profile_object['dicomstore']),
+                        "force": True
+                    }
+                }
+            elif profile_object['dataset'] in datasets:
+                print('Dataset ok, but no table, creating...')
+                return {
+                    "bigqueryDestination": {
+                        "tableUri": 'bq://{}.{}.{}'.format(profile_object['project'], profile_object['dataset'], profile_object['dicomstore']),
+                        "force": True
+                    }
+                }
+            else:
+                print('Dataset not in bq yet, creating...')
+                create_bigquery_dataset(args, profile_object, bq_client)
+                return {
+                    "bigqueryDestination": {
+                        "tableUri": 'bq://{}.{}.{}'.format(profile_object['project'], profile_object['dataset'], profile_object['dicomstore']),
+                        "force": True
+                    }
+                }
+
+        body = create_body(args, profile_object)
+        hc_client.dicomStores.export(name=store_name, body=body)
 
     def create_where_clause(args):
         if args.all:
@@ -127,7 +151,8 @@ def query_dicom(args):
     profile = get_profile()
     profile_object = create_profile_object('dicomStore', profile, args)
     credentials = google.oauth2.credentials.Credentials(get_token())
-    hc_client = Client(get_token)
+    token = get_token()
+    hc_client = Client(token)
     bq_client = bigquery.Client(profile_object['project'], credentials)
 
     store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**profile_object)
@@ -135,7 +160,7 @@ def query_dicom(args):
 
     if args.export or profile_object['dicomstore'] not in [table.table_id for table in tables]:
         print('Exporting Healthcare API dicomstore to BigQuery')
-        export_controller(list(bq_client.list_datasets()), profile_object, args, bq_client)
+        export_controller(list(bq_client.list_datasets()), profile_object, args, bq_client, hc_client)
 
     # TODO enable raw queries (?)
     query = SQL_TEMPLATE.format(dataset=profile_object['dataset'], table=profile_object['dicomstore'], where=create_where_clause(args))

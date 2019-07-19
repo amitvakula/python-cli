@@ -4,7 +4,7 @@ import sys
 from .auth import get_token
 from .profile import get_profile, create_profile_object
 from ...errors import CliError
-from healthcare_api.client import Client, base
+from healthcare_api.client import Client
 
 QUERY_HL7_DESC = """
 Search for HL7 messages in Healthcare API.
@@ -42,10 +42,11 @@ def add_command(subparsers):
 def query_hl7(args):
     profile = get_profile()
     profile_object = create_profile_object('hl7Store', profile, args)
-    hc_client = Client(get_token)
+    token = get_token()
+    hc_client = Client(token)
     store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/hl7V2Stores/{hl7store}'.format(**profile_object)
-    resp = hc_client.list_hl7v2_messages(store_name, filter_=args.query)
-    ids = list(map(lambda x: x.split('/')[-1], resp['messages']))
+    resp = hc_client.hl7V2Stores.messages.list(parent=store_name, filter=' '.join(args.query))
+    ids = list(map(lambda x: x.split('/')[-1], resp))
     summary = 'Query matched {} resources'.format(len(ids))
     print(summary, file=sys.stderr)
     for ref in ids:
