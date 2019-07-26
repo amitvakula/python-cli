@@ -11,7 +11,7 @@ import zipfile
 
 from flywheel_migration import deidentify, dcm
 
-from . import walker
+from . import util, walker
 from .sdk_impl import create_flywheel_client, SdkUploadWrapper
 from .folder_impl import FSWrapper
 from .private_tags import add_private_tags
@@ -20,6 +20,14 @@ DEFAULT_CONFIG_PATH = '~/.config/flywheel/cli.cfg'
 CLI_LOG_PATH = '~/.cache/flywheel/logs/cli.log'
 
 RE_CONFIG_LINE = re.compile(r'^\s*([-_a-zA-Z0-9]+)\s*([:=]\s*(.+?))?\s*$')
+
+
+class ConfigError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
 
 
 class Config(object):
@@ -57,6 +65,26 @@ class Config(object):
             import certifi
             certifi.where = lambda: ca_certs
             logging.info('Using certificates override: %s', certifi.where())
+
+        # Time Zone
+        timezone = getattr(args, 'timezone', None)
+        if timezone is not None:
+            # Validate the timezone string
+            import pytz
+            import flywheel_migration
+
+            try:
+                tz = pytz.timezone(timezone)
+            except pytz.exceptions.UnknownTimeZoneError:
+                raise ConfigError(f'Unknown timezone: {timezone}')
+
+            # Update the default timezone for flywheel_migration and util
+            util.DEFAULT_TZ = tz
+            flywheel_migration.util.DEFAULT_TZ = tz
+
+            # Also set in the environment
+            os.environ['TZ'] = timezone
+
 
         # Set output folder
         self.output_folder = getattr(args, 'output_folder', None)
@@ -202,6 +230,7 @@ class Config(object):
 
         parser.add_argument('-y', '--yes', action='store_true', help='Assume the answer is yes to all prompts')
         parser.add_argument('--ca-certs', help='The file to use for SSL Certificate Validation')
+        parser.add_argument('--timezone', help='Set the effective local timezone for imports')
 
         log_group = parser.add_mutually_exclusive_group()
         log_group.add_argument('--debug', action='store_true', help='Turn on debug logging')
