@@ -1,8 +1,16 @@
 import copy
 from flywheel_cli.importers.container_factory import ContainerFactory, ContainerResolver
 
+class MockContainer:
+    def __init__(self, _id, uid, label=None):
+        self.id = _id
+        self.uid = uid
+        self.label = label
+
+
 class MockContainerResolver(ContainerResolver):
     def __init__(self, paths=None):
+        # Each path is a tuple of id, uid and (optionally) label
         if paths:
             self.paths = paths
         else:
@@ -11,8 +19,21 @@ class MockContainerResolver(ContainerResolver):
 
     def resolve_path(self, container_type, path):
         if path in self.paths:
-            return self.paths[path]
+            return self.paths[path][:2]
         return None, None
+
+    def resolve_children(self, container_type, path):
+        children = []
+
+        p1 = path.split('/')
+        p1len = len(p1)
+
+        for cmp_path, fields in self.paths.items():
+            p2 = cmp_path.split('/')
+            if len(p2) == p1len+1 and p2[:p1len] == p1:
+                children.append(MockContainer(*fields))
+
+        return children
 
     def create_container(self, parent, container):
         self.created_nodes.append((parent, container))

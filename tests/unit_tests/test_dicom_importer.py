@@ -1,9 +1,13 @@
+import collections
 import copy
+
 import pytest
 import pydicom
+
 from flywheel_migration import DicomFile
 
 from flywheel_cli.importers import DicomScanner
+from flywheel_cli.importers.container_factory import ContainerFactory
 from flywheel_cli.config import Config
 from flywheel_cli.walker import PyFsWalker
 
@@ -173,3 +177,227 @@ def test_resolve_acquisition_malformed_secondary():
 
     assert dicom_scanner.sessions['1'].acquisitions['1'] == acquisition
 
+def test_dicom_uids(temp_fs, dicom_data):
+    tmpfs, tmpfs_url = temp_fs(collections.OrderedDict({
+        'DICOM': [
+            ('001.dcm', dicom_data('16844_1_1_dicoms', 'MR.1.2.840.113619.2.408.5282380.5220731.23348.1516669692.164.dcm'))
+        ],
+    }))
+
+    config = Config()
+    dicom_scanner = DicomScanner(config)
+
+    resolver = MockContainerResolver()
+    container_factory = ContainerFactory(resolver)
+
+    context = {
+        'group': {'_id': 'my_group'},
+        'project': {'label': 'Dicom Scan'},
+        'subject': {'label': '1001'}
+    }
+
+    walker = PyFsWalker(tmpfs_url, src_fs=tmpfs)
+    dicom_scanner.discover(walker, context, container_factory)
+
+    itr = iter(container_factory.walk_containers())
+
+    _, child = next(itr)
+    assert child.container_type == 'group'
+    assert child.id == 'my_group'
+    assert not child.exists
+
+    _, child = next(itr)
+    assert child.container_type == 'project'
+    assert child.label == 'Dicom Scan'
+    assert not child.exists
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'subject'
+    assert child.label == '1001'
+    assert not child.exists
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'session'
+    assert child.label == '2018-01-24 17:35:01'
+    assert child.uid == '128401136196408128090802883025653595086587293755801755'
+    assert not child.exists
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'acquisition'
+    assert child.label == '3Plane Loc fgre'
+    assert child.uid == '12840113619240852823805220731304241516669014474'
+    assert not child.exists
+    assert len(child.files) == 0
+
+    assert len(child.packfiles) == 1
+    desc = child.packfiles[0]
+    assert desc.packfile_type == 'dicom'
+    assert desc.path == ['DICOM/001.dcm']
+    assert desc.count == 1
+
+    try:
+        next(itr)
+        pytest.fail('Unexpected container found')
+    except StopIteration:
+        pass
+
+def test_dicom_uids_handle_session_rename(temp_fs, dicom_data):
+    STUDY_UID = '128401136196408128090802883025653595086587293755801755'
+
+    tmpfs, tmpfs_url = temp_fs(collections.OrderedDict({
+        'DICOM': [
+            ('001.dcm', dicom_data('16844_1_1_dicoms', 'MR.1.2.840.113619.2.408.5282380.5220731.23348.1516669692.164.dcm'))
+        ],
+    }))
+
+    config = Config()
+    dicom_scanner = DicomScanner(config)
+
+    resolver = MockContainerResolver({
+        'my_group': ('my_group', None),
+        'my_group/Dicom Scan': ('project_id', None),
+        'my_group/<id:project_id>/1001': ('subject_id', None),
+        'my_group/<id:project_id>/<id:subject_id>/Renamed Session':
+            ('session_id', STUDY_UID, 'Renamed Session'),
+    })
+    container_factory = ContainerFactory(resolver)
+
+    context = {
+        'group': {'_id': 'my_group'},
+        'project': {'label': 'Dicom Scan'},
+        'subject': {'label': '1001'}
+    }
+
+    walker = PyFsWalker(tmpfs_url, src_fs=tmpfs)
+    dicom_scanner.discover(walker, context, container_factory)
+
+    itr = iter(container_factory.walk_containers())
+
+    _, child = next(itr)
+    assert child.container_type == 'group'
+    assert child.id == 'my_group'
+    assert child.exists
+
+    _, child = next(itr)
+    assert child.container_type == 'project'
+    assert child.label == 'Dicom Scan'
+    assert child.exists
+    assert child.id == 'project_id'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'subject'
+    assert child.label == '1001'
+    assert child.exists
+    assert child.id == 'subject_id'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'session'
+    assert child.label == 'Renamed Session'
+    assert child.uid == '128401136196408128090802883025653595086587293755801755'
+    assert child.exists
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'acquisition'
+    assert child.label == '3Plane Loc fgre'
+    assert child.uid == '12840113619240852823805220731304241516669014474'
+    assert len(child.files) == 0
+
+    assert len(child.packfiles) == 1
+    desc = child.packfiles[0]
+    assert desc.packfile_type == 'dicom'
+    assert desc.path == ['DICOM/001.dcm']
+    assert desc.count == 1
+
+    try:
+        next(itr)
+        pytest.fail('Unexpected container found')
+    except StopIteration:
+        pass
+
+def test_dicom_uids_handle_acquisition_rename(temp_fs, dicom_data):
+    STUDY_UID = '128401136196408128090802883025653595086587293755801755'
+    SERIES_UID = '12840113619240852823805220731304241516669014474'
+
+    tmpfs, tmpfs_url = temp_fs(collections.OrderedDict({
+        'DICOM': [
+            ('001.dcm', dicom_data('16844_1_1_dicoms', 'MR.1.2.840.113619.2.408.5282380.5220731.23348.1516669692.164.dcm'))
+        ],
+    }))
+
+    config = Config()
+    dicom_scanner = DicomScanner(config)
+
+    resolver = MockContainerResolver({
+        'my_group': ('my_group', None),
+        'my_group/Dicom Scan': ('project_id', None),
+        'my_group/<id:project_id>/1001': ('subject_id', None),
+        'my_group/<id:project_id>/<id:subject_id>/Renamed Session':
+            ('session_id', STUDY_UID, 'Renamed Session'),
+        'my_group/<id:project_id>/<id:subject_id>/<id:session_id>/Renamed Acquisition':
+            ('acquisition_id', SERIES_UID, 'Renamed Acquisition'),
+    })
+    container_factory = ContainerFactory(resolver)
+
+    context = {
+        'group': {'_id': 'my_group'},
+        'project': {'label': 'Dicom Scan'},
+        'subject': {'label': '1001'}
+    }
+
+    walker = PyFsWalker(tmpfs_url, src_fs=tmpfs)
+    dicom_scanner.discover(walker, context, container_factory)
+
+    itr = iter(container_factory.walk_containers())
+
+    _, child = next(itr)
+    assert child.container_type == 'group'
+    assert child.id == 'my_group'
+    assert child.exists
+
+    _, child = next(itr)
+    assert child.container_type == 'project'
+    assert child.label == 'Dicom Scan'
+    assert child.exists
+    assert child.id == 'project_id'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'subject'
+    assert child.label == '1001'
+    assert child.exists
+    assert child.id == 'subject_id'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'session'
+    assert child.label == 'Renamed Session'
+    assert child.uid == '128401136196408128090802883025653595086587293755801755'
+    assert child.exists
+    assert child.id == 'session_id'
+    assert len(child.files) == 0
+
+    _, child = next(itr)
+    assert child.container_type == 'acquisition'
+    assert child.label == 'Renamed Acquisition'
+    assert child.uid == '12840113619240852823805220731304241516669014474'
+    assert child.exists
+    assert child.id == 'acquisition_id'
+    assert len(child.files) == 0
+
+    assert len(child.packfiles) == 1
+    desc = child.packfiles[0]
+    assert desc.packfile_type == 'dicom'
+    assert desc.path == ['DICOM/001.dcm']
+    assert desc.count == 1
+
+    try:
+        next(itr)
+        pytest.fail('Unexpected container found')
+    except StopIteration:
+        pass
