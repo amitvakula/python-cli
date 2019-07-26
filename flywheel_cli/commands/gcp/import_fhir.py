@@ -1,11 +1,9 @@
 import argparse
 import sys
 
-from .auth import get_token_id
-from .import_ghc import add_job, log_import_job, upload_json, check_ghc_import_gear
+from .import_ghc import add_import_job, log_import_job, upload_import_ids_json, check_ghc_import_gear
 from .profile import get_profile, create_profile_object
 from ...errors import CliError
-from ...sdk_impl import create_flywheel_client, create_flywheel_session
 
 IMPORT_FHRI_DESC = """
 Import FHIR resources from Google Healthcare API by resource ref. Resource reference format is the following:
@@ -54,16 +52,12 @@ def import_fhir(args):
 
     profile = get_profile()
     profile_object = create_profile_object('fhirStore', profile, args)
-    api = create_flywheel_session()
 
     refs = args.refs or sys.stdin.read().split()
     if not refs:
         raise CliError('At least one ref required.')
 
-    gear = check_ghc_import_gear(api)
-    client = create_flywheel_client()
-    project = client.lookup(args.container)
-    refs_in_json_file_name = upload_json('fhir', project, refs, client)
+    refs_in_json_file_name = upload_import_ids_json('fhir', args.container, refs)
     store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/fhirStores/{fhirstore}'.format(**profile_object)
-    job = add_job('fhirStore', api, gear, project, refs_in_json_file_name, store_name, get_token_id, args)
-    log_import_job(args, client, job)
+    job = add_import_job(args.container, refs_in_json_file_name, store_name, debug=args.debug)
+    log_import_job(job, job_async=args.job_async)

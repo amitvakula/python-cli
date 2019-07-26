@@ -1,12 +1,9 @@
 import argparse
 import sys
 
-from .auth import get_token_id
-from .import_ghc import add_job, log_import_job, upload_json, check_ghc_import_gear
+from .import_ghc import add_import_job, log_import_job, upload_import_ids_json, check_ghc_import_gear
 from .profile import get_profile, create_profile_object
 from ...errors import CliError
-from ...sdk_impl import create_flywheel_client, create_flywheel_session
-
 
 IMPORT_DICOM_DESC = """
 Import dicom series or whole studies from Google Healthcare API by InstanceUIDs.
@@ -54,16 +51,12 @@ def import_dicom(args):
 
     profile = get_profile()
     profile_object = create_profile_object('dicomStore', profile, args)
-    api = create_flywheel_session()
 
     uids = args.uids or sys.stdin.read().split()
     if not uids:
         raise CliError('At least one UID required.')
 
-    gear = check_ghc_import_gear(api)
-    client = create_flywheel_client()
-    project = client.lookup(args.container)
-    uids_in_json_file_name = upload_json('dicom', project, uids, client)
+    uids_in_json_file_name = upload_import_ids_json('dicom', args.container, uids)
     store_name = 'projects/{project}/locations/{location}/datasets/{dataset}/dicomStores/{dicomstore}'.format(**profile_object)
-    job = add_job('dicomStore', api, gear, project, uids_in_json_file_name, store_name, get_token_id, args)
-    log_import_job(args, client, job)
+    job = add_import_job(args.container, uids_in_json_file_name, store_name, de_identify=args.de_identify)
+    log_import_job(job, job_async=args.job_async)
