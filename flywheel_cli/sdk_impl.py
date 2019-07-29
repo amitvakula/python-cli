@@ -157,6 +157,17 @@ class SdkUploadWrapper(Uploader, ContainerResolver):
             log.debug('Resolve %s: %s - NOT FOUND', container_type, path)
             return None, None
 
+    def resolve_children(self, container_type, path):
+        parts = path.split('/')
+
+        try:
+            result = self.fw.resolve(parts)
+            log.debug('Resolve %s: %s - returned: %d children', container_type, path, len(result.children))
+            return result.children
+        except flywheel.ApiException:
+            log.debug('Resolve %s: %s - NOT FOUND', container_type, path)
+            return []
+
     def create_container(self, parent, container):
         # Create container
         create_fn = getattr(self.fw, 'add_{}'.format(container.container_type), None)

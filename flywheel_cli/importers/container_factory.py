@@ -55,6 +55,18 @@ class ContainerResolver(ABC):
             str, str: The id and uid if the container exists, otherwise None
         """
 
+    def resolve_children(self, container_type, path):
+        """Return the child nodes of a container
+
+        Arguments:
+            container_type (str): The container type hint
+            path (str): The resolver path
+
+        Returns:
+            list(dict): A list of child containers
+        """
+        raise NotImplementedError()
+
     @abstractmethod
     def create_container(self, parent, container):
         """Create the container described by container as a child of parent.
@@ -263,13 +275,46 @@ class ContainerFactory(object):
 
         # Check if exists
         if self.resolver and parent.exists:
-            path = combine_path(path, self.resolver.path_el(child))
-            cid, uid = self.resolver.resolve_path(container_type, path)
-            if cid:
-                child.id = cid
-                child.uid = uid
+            # Try to resolve and scan children first
+            target = None
+            children = []
+            if child.uid and self.uids:
+                children = self._resolve_children(container_type, path)
+                target = self._find_child_by_uid(parent, child, container_type, uid, path, children)
+
+            if target is None:
+                target = self._find_child_by_label(parent, child, container_type, uid, path, children)
+
+            if target:
+                child.id, child.uid, child.label = target
                 child.exists = True
 
         parent.children.append(child)
         return child
 
+    def _resolve_children(self, container_type, path):
+        """Attempt to resolve child containers for a given path"""
+        try:
+            return self.resolver.resolve_children(container_type, path)
+        except NotImplementedError:
+            return []
+
+    def _find_child_by_uid(self, parent, child, container_type, uid, path, children):
+        """Attempt to find the child by uid"""
+        for container in children:
+            if container.uid == child.uid:
+                return container.id, container.uid, container.label
+        return None
+
+    def _find_child_by_label(self, parent, child, container_type, label, path, children):
+        """Attempt to find the child by label"""
+        if children:
+            for container in children:
+                if container.label == child.label:
+                    return container.id, container.uid, container.label
+        else:
+            child_path = combine_path(path, self.resolver.path_el(child))
+            cid, uid = self.resolver.resolve_path(container_type, child_path)
+            if cid:
+                return cid, uid, child.label
+        return None
