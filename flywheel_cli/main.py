@@ -7,6 +7,7 @@ import sys
 
 import flywheel
 
+from .config import ConfigError
 from .commands import add_commands
 from . import monkey, util
 
@@ -36,9 +37,13 @@ def main():
     args = parser.parse_args()
 
     # Additional configuration
-    config_fn = getattr(args, 'config', None)
-    if callable(config_fn):
-        config_fn(args)
+    try:
+        config_fn = getattr(args, 'config', None)
+        if callable(config_fn):
+            config_fn(args)
+    except ConfigError as err:
+        perror(err)
+        sys.exit(1)
 
     log.debug('CLI Version: %s', util.get_cli_version())
     log.debug('CLI Args: %s', sys.argv)
