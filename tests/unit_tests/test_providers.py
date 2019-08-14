@@ -49,11 +49,15 @@ def test_add_provider_gc_compute():
     # Stub out the data the way it should be retured to verfiy the values are populated
     expected_data = {
         'creds': {
+            'type': 'service_account',
             'project_id': gc_data['project_id'],
             'private_key_id': gc_data['private_key_id'],
             'private_key': gc_data['private_key'],
             'client_email': gc_data['client_email'],
             'client_id': gc_data['client_id'],
+            'auth_uri': 'auth_uri_data',
+            'token_uri': 'token_uri_data',
+            'auth_provider_x509_cert_url': 'https://www.secretplace.com',
             'client_x509_cert_url': gc_data['client_x509_cert_url']
         },
         'config': {
