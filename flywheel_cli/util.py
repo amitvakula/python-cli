@@ -365,3 +365,15 @@ class KeyWithOptions:
         else:
             self.key = value
             self.config = {}
+
+
+class Bunch(dict):
+    """Provides attribute access to key-value pairs"""
+    def __init__(self, **kwargs):
+        super(Bunch, self).__init__(**kwargs)
+
+    def __getattr__(self, attr):
+        try:
+            return self[attr]
+        except KeyError:
+            raise AttributeError("'Bunch' object has no attribute '%s'" % attr)

@@ -7,6 +7,8 @@ import os
 import requests
 import sys
 
+from urllib.parse import urlparse
+
 from .importers import Uploader, ContainerResolver
 
 CONFIG_PATH = '~/.config/flywheel/user.json'
@@ -15,6 +17,15 @@ config = None
 TICKETED_UPLOAD_PATH = '/{ContainerType}/{ContainerId}/files'
 
 log = logging.getLogger(__name__)
+
+class LoginInfo:
+    def __init__(self):
+        self.user = None
+        self.device = None
+        self.is_device = False
+        self.root = False
+        self.label = None
+
 
 def pluralize(container_type):
     """ Convert container_type to plural name
@@ -37,7 +48,7 @@ def load_config():
             with open(path, 'r') as f:
                 config = json.load(f)
         except:
-            pass
+            config = {}
     return config
 
 
@@ -119,6 +130,48 @@ def get_login_id(fw):
 
     user = fw.get_current_user()
     return '{} {}'.format(user.firstname, user.lastname)
+
+def get_login_info(fw):
+    """Get a readable login id for the current api key"""
+    status = fw.get_auth_status()
+
+    info = LoginInfo()
+    info.is_device = status.is_device
+
+    if status.is_device:
+        device = fw.get_device(status.origin.id)
+        info.device = device
+        info.label = '{} - {}'.format(device.get('type', 'device'), device.get('name', status.origin.id))
+        info.root = True
+
+    else:
+        user = fw.get_current_user()
+        info.user = user
+        info.label = '{} {}'.format(user.firstname, user.lastname)
+        info.root = user['root']
+
+    return info
+
+def get_site_name(fw):
+    config = fw.get_config()
+    name = config.site.get('name')
+    url = config.site.get('api_url', fw.api_client.configuration.host)
+    hostname = None
+
+    if url:
+        try:
+            parts = urlparse(url)
+            hostname = parts.hostname
+        except:
+            pass
+
+    if name:
+        if hostname:
+            return '{} ({})'.format(name, hostname)
+        return name
+    elif hostname:
+        return hostname
+    return 'Unknown Site'
 
 """
 For now we skip subjects, replacing them (effectively) with the project layer,

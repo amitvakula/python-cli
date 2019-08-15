@@ -24,7 +24,7 @@ INSTALL_REQUIRES = [
     'fs>=2.4.4',
     'flywheel-bids~=0.8.0',
     'flywheel_migration>=0.11.0',
-    'flywheel-sdk==8.2.0',
+    'flywheel-sdk==9.0.1',
     'pyinstaller~=3.3.1',
     'tzlocal~=1.5.1',
     'urllib3>=1.25.2',

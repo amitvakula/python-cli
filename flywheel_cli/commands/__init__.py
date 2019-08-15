@@ -1,3 +1,5 @@
+import os
+
 from . import essentials
 from . import import_folder
 from . import import_template
@@ -5,7 +7,7 @@ from . import import_bruker
 from . import import_dicom
 from . import import_bids
 from . import import_parrec
-from . import providers
+
 from . import export_bids
 from .. import sdk_impl
 
@@ -42,8 +44,11 @@ def add_commands(parser):
     import_parser = Config.get_import_parser()
     deid_parser = Config.get_deid_parser()
 
-
     user_config = sdk_impl.load_config()
+
+    # Command switches:
+    enable_beta_commands = os.environ.get('FLYWHEEL_CLI_BETA') == 'true'
+    enable_admin = user_config.get('root', False)
 
     # map commands for help function
     parsers = {}
@@ -116,21 +121,60 @@ def add_commands(parser):
     set_subparser_print_help(parser_job, job_subparsers)
 
     # =====
+    # Admin Commands
+    # =====
+    if enable_admin:
+        parser_admin = subparsers.add_parser('admin', help='Site administration commands')
+        parser_admin.set_defaults(config=get_config)
+        parsers['admin'] = parser_admin
+
+        admin_subparsers = parser_admin.add_subparsers(title='Available admin commands', metavar='')
+    else:
+        parser_admin = None
+        admin_subparsers = None
+
+
+    # =====
     # providers
     # =====
-    if user_config.get('root', False):
-        parser_provider = subparsers.add_parser('provider', help='Add/Modify/Assign providers in the Flywheel system')
+    if parser_admin is not None:
+        from . import providers
+        parser_provider = admin_subparsers.add_parser('provider', help='Add/Modify/Assign providers in the Flywheel system')
         parser_provider.set_defaults(config=get_config)
-        parsers['provider'] = parser_provider
+        parsers['admin provider'] = parser_provider
 
         provider_subparsers = parser_provider.add_subparsers(title='Available provider commands', metavar='')
-        parsers['provider add'] = providers.add_add_command(provider_subparsers, [])
-        parsers['provider modify'] = providers.add_modify_command(provider_subparsers, [])
-        parsers['provider assign'] = providers.add_assign_command(provider_subparsers, [])
+        parsers['admin provider add'] = providers.add_add_command(provider_subparsers, [])
+        parsers['admin provider modify'] = providers.add_modify_command(provider_subparsers, [])
+        parsers['admin provider assign'] = providers.add_assign_command(provider_subparsers, [])
 
         # Link help commands
         set_subparser_print_help(parser_provider, provider_subparsers)
 
+    # =====
+    # gears
+    # =====
+    if parser_admin is not None and enable_beta_commands:
+        from . import gears
+        parser_gears = admin_subparsers.add_parser('gears', help='Manage gears installed on flywheel instances')
+        parsers['admin gears'] = parser_gears
+
+        gears_subparsers = parser_gears.add_subparsers(title='Available gears commands', metavar='')
+        set_subparser_print_help(parser_gears, gears_subparsers)
+
+        parsers['admin gears install'] = gears.gears_install.add_command(gears_subparsers)
+        parsers['admin gears upgrade'] = gears.gears_upgrade.add_command(gears_subparsers)
+        parsers['admin gears show'] = gears.gears_show.add_command(gears_subparsers)
+        parsers['admin gears list'] = gears.gears_list.add_command(gears_subparsers)
+        parsers['admin gears search'] = gears.gears_search.add_command(gears_subparsers)
+
+        parser_rules = admin_subparsers.add_parser('gear-rules', help='Manage gear-rules on flywheel instances')
+        parsers['admin gears-rules'] = parser_rules
+
+        rules_subparsers = parser_rules.add_subparsers(title='Available gear-rules commands', metavar='')
+        set_subparser_print_help(parser_rules, rules_subparsers)
+        parsers['admin gear-rules list'] = gears.rules_list.add_command(rules_subparsers)
+        parsers['admin gears-rules upgrade'] = gears.rules_upgrade.add_command(rules_subparsers)
 
     # =====
     # help commands

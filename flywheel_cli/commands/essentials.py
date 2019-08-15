@@ -61,12 +61,12 @@ def login(args):
 
     try:
         # Get current user
-        login_id = sdk_impl.get_login_id(fw)
+        login_info = sdk_impl.get_login_info(fw)
 
         # Save credentials
-        sdk_impl.save_api_key(args.api_key, root=user['root'])
+        sdk_impl.save_api_key(args.api_key, root=login_info.root)
 
-        print('You are now logged in as: {}!'.format(login_id))
+        print('You are now logged in as: {}!'.format(login_info.label))
     except Exception as e:
         log.debug('Login error', exc_info=True)
         perror('Error logging in: {}'.format(str(e)))
@@ -86,13 +86,13 @@ def status(args):
         sys.exit(1)
 
     try:
-        login_id = sdk_impl.get_login_id(fw)
+        login_info = sdk_impl.get_login_info(fw)
 
         # Print out status and site
         host_url = fw.api_client.configuration.host
         hostname = urlparse(host_url).hostname
 
-        print('You are currently logged in as {} to {}'.format(login_id, hostname))
+        print('You are currently logged in as {} to {}'.format(login_info.label, hostname))
     except Exception as e:
         perror('{}\n'.format(e))
         perror('Could not authenticate - are you sure your API key is up to date?')
