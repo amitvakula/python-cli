@@ -158,6 +158,7 @@ def add_aws_storage_config(parser):
 Adds GC stroage arguments
 """
 def add_gc_storage_config(parser):
+    parser.add_argument('--region', required=False, help='GC Storage region')
     parser.add_argument('--path', required=False, help='GC Storge path')
     parser.add_argument('--bucket', required=False, help='GC bucket name')
 
@@ -374,6 +375,10 @@ def parse_args(args, config):
             config['creds']['private_key_id'] = key['private_key_id']
             config['creds']['private_key'] = key['private_key']
             config['creds']['client_x509_cert_url'] = key['client_x509_cert_url']
+            config['creds']['auth_provider_x509_cert_url'] = key['auth_provider_x509_cert_url']
+            config['creds']['token_uri'] = key['token_uri']
+            config['creds']['auth_uri'] = key['auth_uri']
+            config['creds']['type'] = key['type']
 
 
 """
@@ -424,15 +429,12 @@ def get_config_vals(class_, type_):
             'project_id': '',
             'private_key': '',
             'private_key_id': '',
-            'client_x509_cert_url': ''
+            'client_x509_cert_url': '',
+            'auth_provider_x509_cert_url': '',
+            'auth_uri': '',
+            'token_uri': '',
+            'type': ''
         }
-
-    if class_=='storage' and type_=='gc':
-        return_vals['config'] = {
-                'path': '' # This only has path until its moved from PyFs 
-        }
-        return return_vals
-
 
     # Aws types use the same creds
     if type_=='aws':
@@ -440,7 +442,7 @@ def get_config_vals(class_, type_):
             'aws_access_key_id': '',
             'aws_secret_access_key': ''
         }
-    if class_ == 'storage' and type_=='aws':
+    if class_ == 'storage':
         return_vals['config'] = {
             'bucket': '',
             'region': '',
