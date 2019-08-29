@@ -2,7 +2,7 @@ import collections
 
 import fs
 import pytest
-import yaml
+from ruamel.yaml import YAML
 
 from flywheel_cli.importers import compile_regex, parse_template_string, parse_template_list, StringMatchNode, CompositeNode
 from flywheel_cli.util import METADATA_EXPR
@@ -13,6 +13,10 @@ from flywheel_cli.walker import PyFsWalker
 from .test_container_factory import MockContainerResolver
 from .test_folder_importer import mock_fs, make_config
 from .test_template_string import project_pattern, subject_pattern, session_pattern
+
+
+yaml = YAML()
+
 
 def make_importer(resolver, template='', config_args=None, **kwargs):
     assert template

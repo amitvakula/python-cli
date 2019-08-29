@@ -3,7 +3,8 @@ import os
 import re
 import sys
 import textwrap
-import yaml
+
+from ruamel.yaml import YAML, YAMLError
 
 from ..importers import parse_template_string, parse_template_list, FolderImporter
 from ..util import set_nested_attr, split_key_value_argument, METADATA_ALIASES
@@ -60,12 +61,12 @@ def import_folder_with_template(args):
         context=build_context(args.set_var), config=args.config)
 
     if os.path.isfile(args.template):
-        import yaml
         with open(args.template, 'r') as f:
             try:
+                yaml = YAML()
                 template_list = yaml.load(f)
                 importer.root_node = parse_template_list(template_list, args.config)
-            except yaml.YAMLError as exc:
+            except YAMLError as exc:
                 print('Unable to parse template file (YAML expected)', file=sys.stderr)
                 sys.exit(1)
     else:
