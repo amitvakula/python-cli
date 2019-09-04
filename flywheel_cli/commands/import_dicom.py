@@ -18,6 +18,7 @@ def add_command(subparsers, parents):
 
 def import_dicoms(args):
     # Build the importer instance
+    print("...atempting to import dicom")
     importer = DicomScannerImporter(group=args.group, project=args.project, config=args.config,
         subject_label=args.subject, session_label=args.session)
 
