@@ -107,7 +107,10 @@ class Config(object):
         if not profile_name:
             profile_name = 'none'
 
-        self.deid_profile = self.load_deid_profile(profile_name, args=args)
+        try:
+            self.deid_profile = self.load_deid_profile(profile_name, args=args)
+        except deidentify.ValidationError as e:
+            raise ConfigError(str(e))
 
         # Add private dicom tags
         dicom_tags_file = getattr(args, 'private_dicom_tags', None)

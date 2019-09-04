@@ -2,10 +2,11 @@ import logging
 import flywheel
 import os
 import tempfile
-import yaml
 import json
 import sys
 import argparse
+
+from ruamel.yaml import YAML
 
 from ..sdk_impl import create_flywheel_client
 from ..util import edit_file
@@ -21,7 +22,7 @@ def add_add_command(subparsers, parents):
     # We have to replicate these arguments to all the subparses to keep the command positional order sane
     #parser.add_argument('--label', required=False, help='Name of the provider')
     #parser.add_argument('--skip-edit', required=False, help='Skip the interactive editor', action='store_true')
- 
+
     def print_help(args):
         parser.print_help()
 
@@ -72,7 +73,7 @@ def add_class_commands(subparsers, parents):
     def print_help(args):
         parser_compute.print_help()
     parser_compute.set_defaults(func=print_help)
-    
+
     compute_subs = parser_compute.add_subparsers(dest='type', metavar='{type}')
     add_compute_type_commands(compute_subs, parents)
 
@@ -202,7 +203,7 @@ def add_provider(args):
     config = get_config_vals(class_=args.class_, type_=args.type)
 
     parse_args(args, config)
-    
+
     if args.skip_edit:
         id_ = fw.add_provider(config)
         # log.info('Provider has been saved: {}'.format(id_))
@@ -277,16 +278,17 @@ def assign_provider(args):
 
 
 """
-Provides a local system edior that allows the user to view the config in Yaml. 
+Provides a local system edior that allows the user to view the config in Yaml.
 Usees the current api to validate changes so that we can determine when the configuration
 is correct and complete otherwise we look the user in the edit routine, unless user exits.
 
-args: 
+args:
     config dictionary: The current object config to be injected
     function function: The callable sdk command to process the data
     id string: The id if we are going to be editing an existing provider
 """
 def process_edit(config, function, id_=None):
+    yaml = YAML()
     data = yaml.dump(config, default_flow_style=False)
 
     fd, path = tempfile.mkstemp('provider-config')
@@ -332,7 +334,7 @@ def process_edit(config, function, id_=None):
         log.info('Provider has been saved: {}'.format(id_))
     else:
         log.info('Provider has been saved: {}'.format(provider))
-    
+
 """
 Pull args off the command line and place them in the respective config locations
 """
